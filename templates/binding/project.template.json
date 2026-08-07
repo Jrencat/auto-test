@@ -1,0 +1,86 @@
+{
+  "$schema": "字段说明见 ../../configs/project.schema.md。首次运行由 binding-rule 复制为 <cwd>/.claude/auto-test/project.json，机器/分支绝对路径另存 runtime.local.json。以下为通用示例值，按你的项目替换。",
+  "project": "<your-project>",
+  "architecture": {
+    "type": "monorepo",
+    "frontendDirName": "frontend",
+    "backendDirName": "backend",
+    "frontendStack": "Vue3 + TS + Ant Design Vue + ag-Grid (dev port 3000)",
+    "backendStack": "<你的后端技术栈，如 Spring Cloud / Node / Go>"
+  },
+  "input": {
+    "docKinds": ["页面", "接口", "流程", "需求"],
+    "pageDocDirEnvKey": "TEST_PAGE_DOC_DIR",
+    "pageDocDirDefault": "docs/test-pages/",
+    "docGlobs": ["**/页面.md", "**/接口.md", "**/流程.md", "**/需求.md"],
+    "moduleFrom": "取描述文件所在目录名或文件内模块前缀作为 <module>（如 order-module）"
+  },
+  "runner": {
+    "name": "playwright",
+    "configRel": "playwright.config.ts",
+    "projects": ["setup", "api", "e2e"],
+    "browserInstall": "npx playwright install chromium"
+  },
+  "commands": {
+    "cwdKey": "frontend",
+    "all": "npm run test",
+    "api": "npm run test:api",
+    "e2e": "npm run test:e2e",
+    "byName": "npx playwright test <file> -g \"<用例名>\"",
+    "report": "npm run test:report",
+    "frontendDev": "npm run dev",
+    "lintCheckOnly": "npm run lint"
+  },
+  "endpoints": {
+    "apiBaseURLEnvKey": "TEST_API_BASE",
+    "apiBaseURLDefault": "http://localhost:8080/api/",
+    "webBaseURLEnvKey": "TEST_WEB_BASE",
+    "webBaseURLDefault": "http://localhost:3000",
+    "webRouteBaseEnvKey": "TEST_WEB_ROUTE_BASE",
+    "webRouteBaseDefault": "/#/",
+    "swagger": "<你的接口文档地址，如 http://localhost:8080/doc.html>"
+  },
+  "auth": {
+    "loginApi": "auth/login",
+    "loginPayload": { "username": "<username>", "password": "<encrypted-or-plain>" },
+    "passwordEncrypt": "按你的前端加密方式实现于 tests/support/crypto.ts（示例为 AES/CFB/NoPadding）；明文登录可留空",
+    "tokenStorage": "sessionStorage['<TEST_APP_ID>_Cache'] 内 token 项（按你的前端存储方式调整）",
+    "headers": ["token", "X-Lang", "plat"],
+    "successCode": 200,
+    "envFileRel": "tests/.env.test (从 tests/.env.test.example 复制)",
+    "authArtifactRel": "tests/.auth/user.json"
+  },
+  "sourceLocate": {
+    "order": ["View", "Router", "API", "Controller", "Service", "Mapper", "XML/SQL", "Database"],
+    "vueGlobRel": "src/views/**/<module>/**/*.vue",
+    "apiGlobRel": "src/api/**/*.ts",
+    "note": "禁止要求用户提供源码路径；根据页面名称在 runtime.local.json 的前后端目录内自动搜索定位。用前端 url 反查后端路由。"
+  },
+  "assertLayers": {
+    "frontend": ["字段校验", "必填", "默认值", "Loading", "按钮禁用", "权限", "状态切换", "充分性断言(模式A)", "中间态断言(模式B)"],
+    "api": ["URL", "Method", "Request", "Response", "HTTP Status", "BusinessCode", "异常处理"],
+    "database": {
+      "keyFields": ["<关键数量/状态字段，如 available / used / frozen>"],
+      "checks": ["更新数量", "更新方向", "数量守恒(如 available + frozen + used 恒等)", "事务一致性"],
+      "tool": "<你的数据库查询 MCP 工具，如 mcp__<project>__read_query；无则留空，DB 断言标 Not Executed>"
+    }
+  },
+  "testcaseDir": "docs/testcases/<module>/",
+  "reportFile": "docs/testcases/<module>/自动化测试执行报告.md",
+  "scriptDir": {
+    "api": "tests/api/",
+    "e2e": "tests/e2e/",
+    "support": "tests/support/"
+  },
+  "domain": {
+    "businessFlow": [],
+    "importEntries": []
+  },
+  "dataIsolationPrefix": "TEST_AUTO_",
+  "constraints": {
+    "noFrontendFormat": true,
+    "noFrontendLintFix": true,
+    "noBackendCompile": false,
+    "dbHardRules": ["禁 DROP/TRUNCATE", "禁无 WHERE DELETE", "禁改生产库/生产配置"]
+  }
+}

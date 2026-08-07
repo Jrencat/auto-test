@@ -1,0 +1,31 @@
+# === auto-test 发布忽略清单 ===
+
+# 每机器/分支的本机绝对路径（由 binding-rule 运行时生成，切勿提交）
+runtime.local.json
+**/.claude/auto-test/runtime.local.json
+
+# 测试运行时私密配置（含测试账号）
+.env.test
+**/tests/.env.test
+
+# 登录态产物
+.auth/
+**/tests/.auth/
+
+# Playwright 产物
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# 依赖与构建
+node_modules/
+dist/
+build/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

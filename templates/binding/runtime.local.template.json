@@ -1,0 +1,8 @@
+{
+  "_comment": "每机器/每分支不同，gitignore，勿提交。由 auto-test binding-rule 每次运行刷新。绝对路径与分支为本机真实值。",
+  "frontendDir": "<前端项目在本机的绝对路径，如 /path/to/your-frontend>",
+  "backendDir": "<后端项目在本机的绝对路径，如 /path/to/your-backend；无则留空>",
+  "frontendBranch": "<git -C frontendDir branch --show-current 运行时填入>",
+  "backendBranch": "<git -C backendDir branch --show-current 运行时填入>",
+  "generatedAt": "<运行时写入真实时间>"
+}
