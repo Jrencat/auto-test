@@ -1,17 +1,31 @@
 # report-rule —— 测试报告、执行证据、Token 控制与最终 Gate
 
-对应主流程 Step10 及收尾。模板见 `templates/report.md`。
+对应主流程 Step10 及收尾。模板见 `templates/run-report.md`（批次报告）与 `templates/report.md`（客户交付版）。
+
+## 零、报告与 Case 解耦（强制架构要求）
+
+- 每次执行生成**独立批次报告**：`<reportDir>/RUN-YYYYMMDD-HHMMSS.md`（默认 `<cwd>/.auto-test/reports/`）。
+- **历史报告只增不改**：不得覆盖、不得删除、不得"合并成一份最新报告"。
+  同一个 Case 被执行 N 次就有 N 份报告。
+- **Case 文件只保存执行摘要**（`last_run_id` / `last_run_status`），详细结果一律进报告。
+- 批次报告的数据来源是执行时写入的 `<reportDir>/RUN-*.jsonl`（逐数据组真实记录），
+  **不得**凭 Case 文档内容"回忆"填写。
 
 ## 一、输出文件（Step10）
 
-更新：
+生成（本轮必产出）：
+- `<reportDir>/RUN-YYYYMMDD-HHMMSS.md`（**批次报告**，见 `templates/run-report.md`）
+
+最小化回写：
+- `<caseDir>/TC-*.md` 的 `status` / `updated_at` / `last_run_id` / `last_run_status`
+
+更新（模块汇总视图，兼容保留）：
 - `docs/testcases/<module>/E2E_业务主流程用例.md`
 - `docs/testcases/<module>/API_接口测试用例.md`
 - `docs/testcases/<module>/IMPORT_专项测试用例.md`
 - `docs/testcases/<module>/VARIANT_数据变体矩阵用例.md`（多分支页面时，见 `templates/testcase-variant.md`）
-
-生成：
-- `docs/testcases/<module>/自动化测试执行报告.md`（客户交付版，见 `templates/report.md`）
+- `docs/testcases/<module>/自动化测试执行报告.md`（客户交付版最新快照，见 `templates/report.md`；
+  该文件是**面向客户的汇总视图**，可覆盖更新，但**必须引用本轮 Run ID**，且不替代批次报告的留存）
 
 ## 二、报告定位：默认输出「可直接交付客户」的完备报告
 
@@ -39,9 +53,27 @@
 7. **Conclusion & Recommendations**：稳定性 / 健壮性 / 剩余风险 / 后续建议 /
    是否建议验收 / 是否建议发布。
 
+## 二点二、数据追踪链（批次报告强制，缺一即不合格）
+
+每条执行记录必须能还原：
+
+```
+Run ID → Case ID → Case Title → Data Group ID → 实际输入数据 → 预期结果
+       → Playwright 实际执行 → 实际结果 → PASS/FAIL/ERROR/BLOCKED → Failure Type → 错误信息
+       → 执行时间 → 测试脚本/测试文件
+```
+
+- **"实际输入数据"必须是执行时真实使用的值**（来自 `RUN-*.jsonl`），
+  禁止从用例文档誊抄冒充实际输入——那正是本次重构要杜绝的数据不一致。
+- Case Status 变更（执行前 → 执行后）单列一表，与 Execution Result **分开呈现**。
+- 结构见 `templates/run-report.md`。
+
 ## 二点五、结果统计与归因（所有报告都要）
 
-- 结果统计：PASS / FAIL / BLOCKED / **Not Executed** 数量与**通过率**（分母为实际执行数）。
+- 结果统计：PASS / FAIL / **ERROR** / BLOCKED / **Not Executed** 数量与**通过率**（分母为实际执行数据组数）。
+- **FAIL 与 ERROR 必须分列**：FAIL = 业务断言失败（Assertion Failure）；
+  ERROR = 自动化脚本/基础设施异常（Automation Error）。合并统计视为不合格。
+- `pending_review` 用例逐条列出并标 **Not Executed（待人工审核）**，严禁计入 Pass 或悄悄省略。
 - 总耗时、新增/更新 TestCase 数、新增/更新脚本数。
 - 失败分析：**每个 FAIL/BLOCKED 归入 testcase-rule §9 的分类**（产品缺陷/脚本/环境/配置/
   第三方/网络/测试数据）+ 疑似源码 file:line；**禁止一律归为产品Bug**。
@@ -77,6 +109,12 @@
 
 ## 五、🏁 Final Check Gate（完成前逐项确认，与 auto-test-agent §Gate 一致）
 
+- [ ] 已声明本次 Execution Mode（full-auto / human-in-the-loop）
+- [ ] 已生成独立批次报告 `RUN-YYYYMMDD-HHMMSS.md`，历史报告未被覆盖/删除
+- [ ] 每个数据组都有**实际输入数据**记录，追踪链完整（Case→DataGroup→输入→预期→实际→结果）
+- [ ] FAIL（Assertion Failure）与 ERROR（Automation Error）已分开统计与呈现
+- [ ] Case Status 与 Execution Result 未混用；无"业务断言失败被写成 failed"的情况
+- [ ] `pending_review` 用例全部标 Not Executed，未被自动执行
 - [ ] 已分析源码，**已识别多分支变体页面并构建变体矩阵**
 - [ ] 已维护 TestCase（含 VARIANT 矩阵 + 数据变体）
 - [ ] 已维护脚本（含参数化变体矩阵）
@@ -92,8 +130,10 @@
 
 ## 六、✅ 最终 Summary（统一输出）
 
+- Run ID / Execution Mode：`RUN-YYYYMMDD-HHMMSS` / `full-auto | human-in-the-loop`
+- Case 状态分布：pending_review / ready / running / completed / failed 各 N
 - 源码分析：完成
-- TestCase：新增/更新数量
+- TestCase：新增/更新数量（复用 N 条，去重跳过 N 条）
 - 自动化脚本：新增/更新数量
 - PASS / FAIL / BLOCKED
 - 数据库断言：结论

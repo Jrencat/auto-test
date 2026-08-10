@@ -65,6 +65,16 @@
       "tool": "<你的数据库查询 MCP 工具，如 mcp__<project>__read_query；无则留空，DB 断言标 Not Executed>"
     }
   },
+  "execution": {
+    "defaultMode": "",
+    "_defaultMode": "本项目默认执行模式：full-auto | human-in-the-loop | 空（空则每次询问一次，见 rules/mode-rule.md）"
+  },
+  "caseStore": {
+    "casesDir": ".auto-test/cases/",
+    "reportsDir": ".auto-test/reports/",
+    "caseIdPattern": "TC-<MODULE>-<NNN>",
+    "_note": "用例资产（SSOT）与批次报告目录，相对 <cwd>。见 rules/case-store-rule.md"
+  },
   "testcaseDir": "docs/testcases/<module>/",
   "reportFile": "docs/testcases/<module>/自动化测试执行报告.md",
   "scriptDir": {

@@ -28,7 +28,13 @@ auto-test 把这些沉淀成**默认行为**：多分支变体矩阵全取值覆
 - 🧩 **自动绑定**：首次运行探测前后端路径，探测不到则交互询问；幂等生成前端测试脚手架。
 - 🎯 **完备覆盖**：多分支变体矩阵 + 数据变体清单 + 动态取号 + 真实渲染探测 + 串行隔离执行。
 - 🧪 **通用断言模式库**：数量充足性精确断言、多步中间态逐步断言（可持续增长）。
-- 📄 **客户交付版报告**：Executive Summary / Coverage / Detailed Results / Edge Case / Defects & Risk / Conclusion。
+- 🕹 **双执行模式**：Full-Auto 全自动闭环；Human-in-the-Loop 生成后**真正挂起**等人工审核。
+- 🗂 **用例资产化**：`.auto-test/cases/` 一个 Case 一个文件（Frontmatter + 生命周期状态机），
+  可中断、可恢复、可追踪；磁盘上的人工修改优先，重复运行不生成重复用例。
+- 🧾 **测试数据显式化**：Test Data Matrix 写具体真实值（禁止"输入合法用户名"式抽象、禁止编造业务数据），
+  数据组**真正驱动** Playwright 参数化执行。
+- 📄 **报告与用例解耦**：每次执行一份 `.auto-test/reports/RUN-YYYYMMDD-HHMMSS.md`，
+  历史报告只增不改；客户交付版报告含 Executive Summary / Coverage / Detailed Results / Edge Case / Defects & Risk / Conclusion。
 
 ## 快速上手
 
@@ -37,7 +43,17 @@ auto-test 把这些沉淀成**默认行为**：多分支变体矩阵全取值覆
 cp -r auto-test ~/.claude/skills/
 
 # 2) 在 Claude Code 里，进入你的项目工作目录后触发
-/auto-test
+/auto-test                              # 未指定模式时会询问一次
+/auto-test --mode full-auto             # 全自动：生成 → 执行 → 报告
+/auto-test --mode human-in-the-loop     # 生成用例与具体数据后挂起，等人工审核
+```
+
+Human-in-the-Loop 的两段式节奏：
+
+```
+第 1 次运行 → 生成 .auto-test/cases/TC-*.md（status: pending_review）→ 输出审核指引 → 退出
+人工审核    → 检查测试逻辑与「测试数据明细」→ 把 status 改成 ready
+第 2 次运行 → 检测到 ready → 确认后执行 → 回写状态 → 生成 RUN-*.md 批次报告
 ```
 
 首次运行会：依赖预检 → 探测/询问前后端路径 → 生成 `<cwd>/.claude/auto-test/` 绑定 →
@@ -53,8 +69,20 @@ cp -r auto-test ~/.claude/skills/
         ▼
 每项目绑定  <cwd>/.claude/auto-test/project.json        （可提交，项目画像）
 每机器运行时 <cwd>/.claude/auto-test/runtime.local.json  （gitignore，绝对路径+分支）
+测试资产    <cwd>/.auto-test/cases/                     （用例 SSOT，建议入库）
+执行报告    <cwd>/.auto-test/reports/RUN-*.md|.jsonl     （一次执行一份，只增不改）
 前端脚手架  <frontend>/tests/{support,playwright.config.ts,.env.test.example}
 ```
+
+## 用例生命周期
+
+```
+pending_review --人工审核--> ready --开始执行--> running --> completed / failed
+```
+
+`completed ≠ PASS`：业务断言失败仍是 `completed`（执行结果 FAIL / Assertion Failure）；
+`failed` 只用于自动化本身的不可恢复异常（执行结果 ERROR / Automation Error）。
+执行模式（Full-Auto / HITL）属于本次运行上下文，**不写入用例**，与用例状态严格分离。
 
 ## 适配到你的项目
 

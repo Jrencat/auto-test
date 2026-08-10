@@ -95,6 +95,13 @@ cp -r auto-test-skill/auto-test ~/.claude/skills/
    /auto-test docs/test-pages/订单模块/页面.md docs/test-pages/库存管理/
    ```
 
+   可显式指定执行模式（不指定则询问一次）：
+
+   ```
+   /auto-test --mode full-auto             # 全自动：生成 → 执行 → 报告
+   /auto-test --mode human-in-the-loop     # 生成用例与具体数据后挂起，等人工审核
+   ```
+
 3. 首次运行时 Skill 会自动：
    - **依赖预检**：检查 Node / Playwright / Chromium / 服务 / DB 工具，缺失给安装命令。
    - **项目绑定**：探测前后端项目路径；探测不到会**弹问**让你输入前后端项目绝对路径。
@@ -115,6 +122,8 @@ cp -r auto-test-skill/auto-test ~/.claude/skills/
                    ▼
    <cwd>/.claude/auto-test/project.json         项目画像（可提交，团队共享）
    <cwd>/.claude/auto-test/runtime.local.json   本机绝对路径 + 当前分支（gitignore）
+   <cwd>/.auto-test/cases/TC-*.md               测试用例资产（SSOT，建议入库）
+   <cwd>/.auto-test/reports/RUN-*.md|.jsonl     每次执行的独立批次报告（只增不改）
    <frontend>/tests/…                           前端测试脚手架
 ```
 
@@ -122,6 +131,103 @@ cp -r auto-test-skill/auto-test ~/.claude/skills/
 - **项目画像 `project.json`**：技术栈、目录名、端口、命令、断言字段——相对信息，可提交给团队共享。
 - **运行时 `runtime.local.json`**：前后端项目在**本机的绝对路径 + 当前分支**。随机器/分支不同而变，故 gitignore。
   - 👉 **分支自动对准**：每次运行都刷新分支字段，你在不同分支上开发前后端时，测试自动对准当前分支的代码。
+- **测试资产 `.auto-test/`**：用例与报告分离——`cases/` 是持久化的用例资产（唯一事实来源），
+  `reports/` 是每次执行的独立批次报告。用例可被反复执行，历史报告不覆盖。
+
+---
+
+## 执行模式与用例生命周期
+
+### 两种执行模式
+
+| 模式 | 行为 | 适用 |
+|------|------|------|
+| **Full-Auto** | 生成 → 自动 `ready` → 自动执行 → 自动出报告 | 回归、CI、无需人工把关的场景 |
+| **Human-in-the-Loop** | 生成用例与**具体测试数据** → `pending_review` → 写盘 → 输出审核指引 → **退出** | 测试逻辑/数据需要业务同学确认 |
+
+模式解析顺序：`--mode` 参数 → 自然语言已明确 → `project.json.execution.defaultMode` → 询问（**只问一次**）。
+
+### Human-in-the-Loop 的两段式节奏
+
+```
+第 1 次运行 → 生成 .auto-test/cases/TC-*.md（status: pending_review）→ 输出审核指引 → 退出
+人工审核    → 检查测试逻辑与「测试数据明细」，按需修改数据 → 把 status 改成 ready
+第 2 次运行 → 检测到 ready → 确认后执行 → 回写状态 → 生成 RUN-*.md 批次报告
+```
+
+- 人工修改的内容**永远优先**：Skill 不覆盖、不重建、不"恢复"你改过的用例与数据。
+- Skill **不会**自作主张把 `pending_review` 改成 `ready`；也不提供"一键全部通过并执行"的快捷路径。
+- 重复运行**不会**重复生成同一场景的用例（按 ID / 标题 / 目标 / 字段集合 / 数据去重）。
+
+### 用例状态机
+
+```
+pending_review --人工审核--> ready --开始执行--> running --> completed / failed
+```
+
+| 状态 | 含义 |
+|------|------|
+| `pending_review` | 已生成、待人工审核；**不会被执行** |
+| `ready` | 已审核，可执行 |
+| `running` | 执行中 |
+| `completed` | 已完成一次执行（**≠ PASS**，业务断言失败也是 completed） |
+| `failed` | 自动化本身不可恢复异常（Playwright 起不来、脚本语法错误等） |
+
+### 状态 ≠ 执行结果
+
+| 维度 | 取值 | 存放 |
+|------|------|------|
+| Case Status | `pending_review`/`ready`/`running`/`completed`/`failed` | 用例 Frontmatter |
+| Execution Result | `PASS`/`FAIL`/`ERROR`/`BLOCKED` | 批次报告 + `last_run_status` |
+| Failure Type | `Assertion Failure`（业务） / `Automation Error`（自动化） | 批次报告 |
+
+```
+Case Status: completed + Result: FAIL  + Assertion Failure → 跑完了，业务断言不对（产品缺陷候选）
+Case Status: failed    + Result: ERROR + Automation Error  → 自动化炸了，没跑完
+```
+
+---
+
+## 测试用例与测试数据
+
+一个 Case 一个文件（`.auto-test/cases/TC-AUTH-001.md`），模板见引擎 `templates/case.md`：
+
+```markdown
+---
+id: TC-AUTH-001
+title: 用户名输入校验
+status: pending_review
+version: 1
+last_run_id: null
+last_run_status: null
+---
+
+## 测试数据明细
+
+| 数据组 ID | 字段名称 | 具体测试输入 | 数据类型 | 数据特征/类型 | 预期校验结果 |
+|---|---|---|---|---|---|
+| D001 | username | `admin@example.com` | string | 正常值 | - |
+| D001 | password | `123456` | string | 正常值 | 登录成功 |
+| D002 | password | `12345` | string | 低于最小长度 | 提示密码至少 6 位 |
+| D003 | username | `' OR '1'='1` | string | SQL Injection | 拒绝非法输入 |
+```
+
+规则要点：
+
+- **同一个数据组 ID 的多行 = 一次完整输入**（D001 = `{username, password}` 一起提交，不拆成两个测试）。
+- **必须写具体真实值**，禁止"输入合法用户名""输入边界值"这类抽象描述（抽象词只能放「数据特征」列）。
+- **禁止编造业务数据**：数据只能来自代码 / API 定义 / 数据库 / Fixture / 文档 / 明确业务规则。
+  确实拿不到时，HITL 模式写 `TODO` / `REQUIRED_INPUT` 并保持 `pending_review`；
+  Full-Auto 模式标 BLOCKED 并在报告写明无法自动验证的原因。
+- **数据真正驱动 Playwright**：脚本从 `loadExecutableCases()` 读数据组填值，
+  杜绝"文档写 `' OR '1'='1`、脚本实际跑 `admin`"的不一致。
+
+```bash
+# 用例资产 CLI（Node ≥ 22）
+node <frontend>/tests/support/caseStore.ts list --status ready
+node <frontend>/tests/support/caseStore.ts show <caseFile>
+node <frontend>/tests/support/caseStore.ts status <caseFile> ready
+```
 
 ---
 
@@ -188,25 +294,30 @@ Skill 默认**连续执行**整条闭环，仅在缺依赖/输入/环境/权限�
 
 ```
 Step-1 依赖预检          缺 Playwright/Chromium/服务 → 给安装命令
-Step0  项目绑定解析       探测/交互前后端路径 + 刷新分支 + 生成前端脚手架
+Step0  项目绑定解析       探测/交互前后端路径 + 刷新分支 + 生成前端脚手架 + 创建 .auto-test/
+Step0.1 执行模式解析      --mode / 自然语言 / 默认配置 / 询问一次
+Step0.2 扫描用例资产      读 .auto-test/cases/ 的 status，决定「生成」还是「恢复执行」
 Step0.5 解析测试页面来源   命令带路径直接用；未带 → 交互二选一（手输多路径 / 用 TEST_PAGE_DOC_DIR 目录）
 Step1  输入完整性检查
 Step2  环境探测 + 真实渲染探测 + 并发安全
 Step3  源码分析：三层断言 + 变体维度识别/矩阵 + 动态取号
-Step4  读取历史 TestCase
-Step5  增量维护 TestCase（变体矩阵 + 数据变体 + 断言模式库）
-Step6  增量维护脚本（参数化变体矩阵）
-Step7  真实执行（串行 + 隔离）
-Step8  收集日志/截图/数据库断言
-Step9  回写用例状态（含失败归因分类）
-Step10 生成客户交付版执行报告
+Step4  读取历史 Case + 去重判定（禁止重复生成同一场景）
+Step5  生成/维护 Case（具体测试数据矩阵 + 变体矩阵 + 数据变体 + 断言模式库）
+Step5.5 🛑 HITL 挂起点     Human-in-the-Loop：写盘 pending_review + 输出审核指引 → 退出
+Step6  增量维护脚本（数据组驱动参数化 + 变体矩阵）
+Step7  真实执行（串行 + 隔离；ready → running）
+Step8  收集日志/截图/数据库断言 + 逐数据组写执行记录
+Step9  回写 Case 状态（running → completed/failed，最小化改写）
+Step10 生成批次 Run Report + 客户交付版报告
 Step11 最终 Gate + Self Review
 ```
 
 **产物**：
-- 用例：`docs/testcases/<module>/`（含多分支页面的变体矩阵用例）
+- 用例资产（SSOT）：`<cwd>/.auto-test/cases/TC-*.md`
+- 批次报告：`<cwd>/.auto-test/reports/RUN-YYYYMMDD-HHMMSS.md`（+ 同名 `.jsonl` 机器记录）
+- 模块汇总视图：`docs/testcases/<module>/`（含多分支页面的变体矩阵用例）
 - 脚本：`<frontend>/tests/{api,e2e}/`
-- 报告：`docs/testcases/<module>/自动化测试执行报告.md`（客户交付版）
+- 报告：`docs/testcases/<module>/自动化测试执行报告.md`（客户交付版最新快照）
 
 ---
 
@@ -284,18 +395,23 @@ auto-test/
 │   ├── auto-test-agent.md       # 主入口/索引
 │   ├── preflight-rule.md        # 依赖预检
 │   ├── binding-rule.md          # 项目绑定 + 运行时路径/分支 + 脚手架生成
+│   ├── mode-rule.md             # 执行模式（Full-Auto / Human-in-the-Loop）与真正暂停
+│   ├── case-store-rule.md       # 用例资产化 + 生命周期状态机 + 人工修改保护 + 去重
+│   ├── test-data-rule.md        # 测试数据显式化 + Data Group + 参数化驱动 Playwright
 │   ├── environment-rule.md      # 环境探测 + 真实渲染探测 + 并发安全 + 安全边界
 │   ├── source-analysis-rule.md  # 源码定位 + 三层断言 + 变体矩阵 + 动态取号
-│   ├── testcase-rule.md         # 用例维护 + 数据变体清单 + 断言模式库引用
-│   ├── script-rule.md           # 脚本维护 + 选择器手册 + 参数化骨架
-│   ├── execute-rule.md          # 执行/重试/失败归因/证据
-│   └── report-rule.md           # 客户交付版报告 + Gate + Self Review
+│   ├── testcase-rule.md         # 覆盖策略 + 数据变体清单 + 断言模式库引用 + 失败归因
+│   ├── script-rule.md           # 脚本维护 + 选择器手册 + 数据组驱动/参数化骨架
+│   ├── execute-rule.md          # 执行/重试/状态转换/失败类型/证据
+│   └── report-rule.md           # 批次报告 + 客户交付版报告 + Gate + Self Review
 ├── templates/
-│   ├── testcase-*.md            # 用例模板（e2e/api/import/variant）
+│   ├── case.md                  # 单条 Case 资产模板（Frontmatter + Test Data Matrix）
+│   ├── run-report.md            # 单次执行批次报告模板（全链路追踪）
+│   ├── testcase-*.md            # 模块汇总视图模板（e2e/api/import/variant）
 │   ├── assertion-patterns.md    # 通用断言模式库
 │   ├── report.md                # 客户交付版报告模板
 │   ├── binding/                 # 项目绑定 + 运行时模板
-│   └── scaffold/                # 前端测试脚手架（support/*、config、.env.test.example）
+│   └── scaffold/                # 前端测试脚手架（support/*（含 caseStore.ts）、config、.env.test.example）
 └── configs/
     └── project.schema.md        # 绑定配置字段说明
 ```
@@ -318,6 +434,26 @@ A：不会。每次运行都会刷新 `runtime.local.json` 里的前后端当前
 
 **Q：`.claude/auto-test/`（绑定）和 `.claude/skills/auto-test/`（引擎）有什么区别？**
 A：`skills/auto-test/` 是引擎本体；`.claude/auto-test/` 是某个项目首次运行生成的绑定配置。前者可全局共享，后者随项目走（`runtime.local.json` 不入库）。
+
+**Q：我手工改了用例里的测试数据，下次运行会被覆盖吗？**
+A：不会。`.auto-test/cases/` 里的文件是唯一事实来源，Skill 只做**最小化 Frontmatter 回写**
+（`status` / `updated_at` / `last_run_id` / `last_run_status`），正文、测试数据、你新增的字段与注释一律不动。
+
+**Q：重复运行会不会又生成一堆重复用例？**
+A：不会。生成前会按 Case ID / 标题语义 / 测试目标 / 字段集合 / 数据组合去重；
+已有等价用例优先复用，确有新场景才新建，旧用例永不覆盖。
+
+**Q：Human-in-the-Loop 会不会"问一下就继续跑了"？**
+A：不会。生成 `pending_review` 后 CLI 真正退出，本次不执行任何测试。
+`pending_review → ready` 只能由你改磁盘文件完成，Skill 不提供"一键全部通过并执行"的默认路径。
+
+**Q：`completed` 是不是就代表测试通过？**
+A：不是。`completed` 只说明"这次跑完了"。通过与否看执行结果 `PASS` / `FAIL`。
+业务断言失败 = `completed` + `FAIL`；自动化本身炸了才是 `failed` + `ERROR`。
+
+**Q：一个用例跑很多次，报告会互相覆盖吗？**
+A：不会。每次执行生成独立的 `RUN-YYYYMMDD-HHMMSS.md`，历史报告只增不改；
+用例文件里只保留 `last_run_id` / `last_run_status` 摘要。
 
 **Q：会不会误改我的业务代码？**
 A：不会。Skill 只在测试目录新增/维护测试脚手架与用例；对业务源码仅做只读定位与断言，不做格式化、不擅自修改（除非你明确要求）。

@@ -34,8 +34,12 @@
 | `assertLayers.frontend/api/database` | 三层断言字段 | 见模板 |
 | `assertLayers.database.tool` | DB 断言工具 | `<你的 DB 查询工具，如某 MCP 工具>`（可为空 → DB 断言标 Not Executed） |
 | `assertLayers.database.keyFields` | 关键数量/状态字段 | `<如 available / used / frozen>` |
-| `testcaseDir` | 用例目录 | `docs/testcases/<module>/` |
-| `reportFile` | 报告文件 | `docs/testcases/<module>/自动化测试执行报告.md` |
+| `execution.defaultMode` | 默认执行模式（`full-auto` / `human-in-the-loop` / 空=每次询问一次） | `""` |
+| `caseStore.casesDir` | **用例资产目录（SSOT）**，相对 `<cwd>` | `.auto-test/cases/` |
+| `caseStore.reportsDir` | **批次报告目录**（一次执行一份，不覆盖） | `.auto-test/reports/` |
+| `caseStore.caseIdPattern` | Case ID 规则 | `TC-<MODULE>-<NNN>` |
+| `testcaseDir` | 模块汇总视图目录（兼容保留，非 SSOT） | `docs/testcases/<module>/` |
+| `reportFile` | 客户交付版报告（最新快照，非批次报告） | `docs/testcases/<module>/自动化测试执行报告.md` |
 | `scriptDir.api/e2e/support` | 脚本目录（相对前端根） | `tests/api/` `tests/e2e/` `tests/support/` |
 | `domain.businessFlow` | 业务流转链路（领域默认，可空） | `[]`（按你的领域填，如 `["stepA","stepB"]`） |
 | `domain.importEntries` | 导入入口（领域默认，可空） | `[]` |

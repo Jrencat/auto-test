@@ -16,6 +16,20 @@
 - `project.json`：相对结构与领域默认（前后端目录名、端口、DB 工具、断言字段、命令等），**不含绝对路径**。
 - `runtime.local.json`：仅存**本机绝对路径 + 分支**，随机器/分支变化，故 gitignore。
 
+### 测试资产目录（与绑定目录分开，Step0 一并幂等创建）
+
+```
+<cwd>/.auto-test/
+├── cases/        # 测试用例资产（SSOT），建议提交入库
+├── reports/      # 每次执行的独立批次报告 + .jsonl 执行记录
+└── .gitignore    # 默认忽略 reports/*.jsonl
+```
+
+- 路径可被绑定 `project.json.caseStore.casesDir` / `reportsDir` 覆盖。
+- **只创建缺失目录，绝不清空或覆盖已有用例文件**（见 `rules/case-store-rule.md §人工修改保护`）。
+- 若目录位置被自定义，把绝对路径通过 `AUTO_TEST_CASE_DIR` / `AUTO_TEST_REPORT_DIR` 环境变量
+  下发给 Playwright（或在 `tests/.env.test` 写 `AUTO_TEST_DIR`），使脚本与编排层看到同一份资产。
+
 ## 二、解析顺序（Step0，按序尝试，命中即停）
 
 1. **已有绑定**：读 `<cwd>/.claude/auto-test/project.json` + `runtime.local.json`。
@@ -56,6 +70,7 @@
 |------|------|
 | `tests/support/env.ts` | 缺失则生成（含 `pageDocDir`）；已存在则**仅当缺 `pageDocDir` 字段时**补该字段，不覆盖 |
 | `tests/support/crypto.ts` / `fixtures.ts` / `auth.setup.ts` / `resolveActionNo.ts` | 缺失则生成；已存在不覆盖 |
+| `tests/support/caseStore.ts` | 缺失则生成（Case 资产读写 + Test Data Matrix 解析 + Run 记录）；已存在不覆盖 |
 | `playwright.config.ts`（前端根） | 缺失则生成；已存在不覆盖 |
 | `tests/.env.test.example` | 缺失则生成；已存在则**仅追加缺失变量**（尤其 `TEST_PAGE_DOC_DIR`），不改已有行 |
 | `tests/.env.test` | **绝不生成/覆盖**（含真实账号）。缺失时提示用户手动创建 |

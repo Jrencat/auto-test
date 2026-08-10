@@ -24,12 +24,27 @@
 
 ## ⚡ 连续执行策略（Continuous Execution）
 
-默认连续执行整条闭环，**不得逐步等待用户确认**。仅以下情况暂停并输出 BLOCKED：
-依赖缺失 / 输入缺失 / 环境不可用 / 权限不足 / 用户主动终止。
+默认连续执行整条闭环，**不得逐步等待用户确认**。暂停点只有两类：
+
+1. **BLOCKED**：依赖缺失 / 输入缺失 / 环境不可用 / 权限不足 / 用户主动终止。
+2. **HITL 挂起**：Human-in-the-Loop 模式生成 `pending_review` 用例后**必须真正停止**，
+   等待人工审核（设计内的正常终止，不是失败）——见 `rules/mode-rule.md`。
 
 ```
-依赖预检 → 绑定解析 → 分析源码 → 维护 TestCase → 维护脚本 → 执行测试 → 更新 TestCase → 生成报告
+依赖预检 → 绑定解析 → 模式解析 → 扫描用例资产 → 分析源码 → 维护 Case → [HITL 挂起点]
+→ 维护脚本 → 执行测试 → 回写 Case 状态 → 生成 Run Report
 ```
+
+## 🧬 三个正交维度（架构约束，不得混用）
+
+| 维度 | 取值 | 归属 |
+|------|------|------|
+| **Execution Mode** | `full-auto` / `human-in-the-loop` | 本次执行上下文，**禁止**写入 Case Frontmatter |
+| **Case Status** | `pending_review` / `ready` / `running` / `completed` / `failed` | 持久化测试资产（Frontmatter `status`） |
+| **Execution Result** | `PASS` / `FAIL` / `ERROR` / `BLOCKED` | 单次执行产物（Run Report + `last_run_status`） |
+
+`completed ≠ PASS`：业务断言失败 → `status=completed` + `FAIL` + Failure Type `Assertion Failure`；
+自动化不可恢复异常 → `status=failed` + `ERROR` + Failure Type `Automation Error`。
 
 ## 🚫 安全边界（详见 rules/environment-rule.md）
 
@@ -44,18 +59,22 @@
 |------|------|--------|
 | Step-1 | **运行前依赖预检**（node/npm/@playwright/test/chromium/服务/DB工具） | `rules/preflight-rule.md` |
 | Step0 | **项目绑定解析/探测/交互 + 运行时路径与分支 + 前端脚手架生成** | `rules/binding-rule.md` |
+| Step0.1 | **执行模式解析**（Full-Auto / Human-in-the-Loop，只问一次） | `rules/mode-rule.md` |
+| Step0.2 | **扫描 `.auto-test/cases/`**，按 status 分组，决定「生成」还是「恢复执行」 | `rules/case-store-rule.md` |
 | Step1 | 输入完整性检查 | 本文件 §Step1 |
 | Step2 | 环境与框架探测 + **真实渲染探测 + 并发安全** | `rules/environment-rule.md` |
 | Step3 | 源码分析：三层断言 + **变体维度识别/矩阵构建 + 动态取号** | `rules/source-analysis-rule.md` |
-| Step4 | 读取历史 TestCase | `rules/testcase-rule.md` |
-| Step5 | 增量维护 TestCase（含 **VARIANT 矩阵 + 数据变体清单 + 断言模式库**） | `rules/testcase-rule.md` + `templates/assertion-patterns.md` |
-| Step6 | 增量维护脚本（含 **参数化变体矩阵骨架 + 选择器手册**） | `rules/script-rule.md` |
-| Step7 | 执行（**串行+隔离**） | `rules/execute-rule.md` |
-| Step8 | 收集日志/截图/数据库断言 | `rules/execute-rule.md` |
-| Step9 | 更新 TestCase 状态（含归因分类） | `rules/testcase-rule.md` |
-| Step10 | 生成**客户交付版**执行报告 | `rules/report-rule.md` |
+| Step4 | 读取历史 Case + **去重判定**（禁止重复生成同一场景） | `rules/case-store-rule.md` §六 |
+| Step5 | 生成/增量维护 Case（**具体测试数据矩阵** + VARIANT 矩阵 + 数据变体 + 断言模式库） | `rules/case-store-rule.md` + `rules/test-data-rule.md` + `rules/testcase-rule.md` |
+| Step5.5 | 🛑 **HITL 挂起点**：写盘 `pending_review` → 输出审核指引 → 退出（Full-Auto 跳过） | `rules/mode-rule.md` §五 |
+| Step6 | 增量维护脚本（**数据组驱动参数化** + 变体矩阵骨架 + 选择器手册） | `rules/script-rule.md` + `rules/test-data-rule.md` §六 |
+| Step7 | 执行（**串行+隔离**；`ready → running`） | `rules/execute-rule.md` |
+| Step8 | 收集日志/截图/数据库断言 + **逐数据组写 Run 记录** | `rules/execute-rule.md` |
+| Step9 | 回写 Case 状态（`running → completed/failed`，**最小化改写**） | `rules/case-store-rule.md` §五 |
+| Step10 | 生成**批次 Run Report** + 客户交付版报告 | `rules/report-rule.md` |
 
-除 BLOCKED 外不得跳过任何步骤。
+除 BLOCKED 与 HITL 挂起外不得跳过任何步骤。
+（"恢复执行"分支——已有 `ready` 用例时——可跳过 Step3~Step5 的重复生成，直接进 Step6/Step7。）
 
 ## 📋 Step1：输入完整性检查
 
@@ -102,6 +121,14 @@ Emoji/多语言/负数/超上限/重复/不存在/未登录/无效token/并发/�
 
 完成前必须全部满足，否则不得输出"任务完成"，只能继续执行或输出 BLOCKED：
 - [ ] 已完成依赖预检与绑定解析（前后端路径与分支已确认）
+- [ ] 已确定并声明本次 Execution Mode
+- [ ] 已扫描 `.auto-test/cases/` 并完成**去重判定**（无重复生成的等价 Case）
+- [ ] `pending_review` 用例**未被自动执行**、未被覆盖、未被 Skill 擅自改为 `ready`
+- [ ] Case 的测试数据是**具体可执行**的真实数据（无"输入合法用户名"式抽象描述、无编造的业务标识）
+- [ ] Test Data Matrix **真正驱动**了 Playwright（脚本输入取自数据组，非脚本内字面量）
+- [ ] Case Status 与 Execution Result 未混用（业务断言失败为 `completed`+`FAIL`，非 `failed`）
+- [ ] 状态回写为**最小化改写**（正文、未知字段、人工修改均无损）
+- [ ] 本次执行已生成独立的 `RUN-YYYYMMDD-HHMMSS` 批次报告（历史报告未被覆盖）
 - [ ] 已分析源码，**已识别多分支变体页面并构建变体矩阵**
 - [ ] 已维护 TestCase（含 VARIANT 矩阵 + 数据变体 + 适用页面的断言模式库用例）
 - [ ] 已维护脚本（含参数化变体矩阵）
@@ -117,6 +144,9 @@ Emoji/多语言/负数/超上限/重复/不存在/未登录/无效token/并发/�
 
 - 依赖预检：`rules/preflight-rule.md`
 - 项目绑定：`rules/binding-rule.md`
+- 执行模式：`rules/mode-rule.md`
+- 用例资产与生命周期：`rules/case-store-rule.md`
+- 测试数据与参数化：`rules/test-data-rule.md`
 - 环境与安全：`rules/environment-rule.md`
 - 源码定位与断言：`rules/source-analysis-rule.md`
 - TestCase 维护：`rules/testcase-rule.md`

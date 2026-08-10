@@ -12,7 +12,9 @@ tests/
 │   ├── crypto.ts            # 示例密码加密（按你的前端加密方式替换）
 │   ├── auth.setup.ts        # setup 项目：API 登录，产出 .auth/user.json（按你的登录接口调整）
 │   ├── fixtures.ts          # apiClient / authedPage / gotoRoute 等 fixture
-│   └── resolveActionNo.ts   # 动态业务标识解析（通用示例，按你的查询接口调整）
+│   ├── resolveActionNo.ts   # 动态业务标识解析（通用示例，按你的查询接口调整）
+│   └── caseStore.ts         # .auto-test/cases 用例资产读写：Frontmatter 最小化回写 +
+│                            #   Test Data Matrix 解析 + 逐数据组执行记录（也可 node 当 CLI 用）
 ├── api/                     # 接口测试（*.api.spec.ts）
 ├── e2e/                     # UI 端到端测试（*.e2e.spec.ts）
 ├── .auth/                   # 登录态产物（不入库）
@@ -44,6 +46,31 @@ tests/
 > 若 package.json 尚无这些脚本，请添加：
 > `"test": "playwright test"`, `"test:api": "playwright test --project=api"`,
 > `"test:e2e": "playwright test --project=e2e"`, `"test:report": "playwright show-report playwright-report"`。
+
+## 用例资产驱动（caseStore）
+
+测试输入来自 `<cwd>/.auto-test/cases/TC-*.md` 的「测试数据明细」表，**不在脚本里写死字面量**：
+
+```ts
+import { loadExecutableCases, recordResult } from '../support/caseStore';
+
+for (const tc of loadExecutableCases()) {          // 只返回 status=ready / running 的用例
+  for (const g of tc.dataGroups) {                 // 同一数据组 ID 的多行 = 一次完整输入
+    test(`${tc.frontmatter.id} - ${g.id}`, async ({ page }) => {
+      // 用 g.input[字段名] 填值；结果用 recordResult 写入 .auto-test/reports/<RunId>.jsonl
+    });
+  }
+}
+```
+
+CLI（Node ≥ 22，可直接跑 TypeScript）：
+
+```bash
+node tests/support/caseStore.ts list --status ready      # 列出待执行用例与数据组
+node tests/support/caseStore.ts show <caseFile>          # 查看解析结果（含数据组）
+node tests/support/caseStore.ts status <caseFile> ready  # 按状态机推进（非法转换会报错）
+node tests/support/caseStore.ts run-id                   # 生成 RUN-YYYYMMDD-HHMMSS
+```
 
 ## 登录态机制
 

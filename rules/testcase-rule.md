@@ -1,20 +1,32 @@
-# testcase-rule —— TestCase 增量维护规范
+# testcase-rule —— TestCase 覆盖策略与模块汇总视图维护规范
 
 对应主流程 Step4 / Step5 / Step9。
 
-> 脚本/用例目录来自绑定 `project.json`（`testcaseDir`、`scriptDir`）。下文取值均为通用示例。
+> **本文件负责"测什么、覆盖到什么程度"**（覆盖策略、数据变体清单、断言模式库、失败归因）。
+> **"用例怎么存、状态怎么流转、人工修改怎么保护"见 `rules/case-store-rule.md`**；
+> **"测试数据怎么写、怎么驱动 Playwright"见 `rules/test-data-rule.md`**。
+>
+> 脚本/用例目录来自绑定 `project.json`（`caseStore`、`testcaseDir`、`scriptDir`）。下文取值均为通用示例。
 
-## 一、存放位置
+## 一、存放位置（两层，职责不同）
 
 ```
-docs/testcases/<module>/
+<cwd>/.auto-test/cases/            # ① 用例资产 SSOT：一个 Case 一个文件，含 Frontmatter + Test Data Matrix
+├── TC-ORDER-001.md
+└── TC-ORDER-002.md
+
+docs/testcases/<module>/           # ② 模块汇总视图：面向评审/客户交付的可读汇总（兼容保留）
 ├── E2E_业务主流程用例.md
 ├── API_接口测试用例.md
-└── IMPORT_专项测试用例.md
+├── IMPORT_专项测试用例.md
+└── VARIANT_数据变体矩阵用例.md
 ```
 
+- **状态与测试数据以 ①（`.auto-test/cases/`）为准**；② 与 ① 冲突时以 ① 为准。
 - `<module>` 用业务模块标识（如 `order-module`）。
-- 首次执行自动创建；模板见 `templates/testcase-e2e.md` / `testcase-api.md` / `testcase-import.md`。
+- 首次执行自动创建；模板：① 见 `templates/case.md`，
+  ② 见 `templates/testcase-e2e.md` / `testcase-api.md` / `testcase-import.md` / `testcase-variant.md`。
+- 不强制迁移历史聚合用例；本轮新增/改动的用例落到 ①。
 
 ## 二、增量维护原则（严禁整体覆盖）
 
@@ -25,28 +37,38 @@ docs/testcases/<module>/
 
 ## 三、用例 ID 规范
 
-`<MODULE>-<TYPE>-<NNN>`，例如：
-- `ORDER-E2E-001`（端到端主流程）
-- `ORDER-API-013`（接口）
-- `ORDER-IMPORT-004`（导入专项）
+- **Case 资产（`.auto-test/cases/`）**：`TC-<MODULE>-<NNN>`，文件名即 ID，如 `TC-ORDER-001.md`
+  （类型信息写 Frontmatter `kind`，不占 ID 段）。
+- **模块汇总视图（`docs/testcases/`）**：沿用 `<MODULE>-<TYPE>-<NNN>`，如
+  `ORDER-E2E-001` / `ORDER-API-013` / `ORDER-IMPORT-004`，并在条目中标注对应的 Case 文件。
 
-ID 一经分配不得复用/重排。
+ID 一经分配不得复用/重排/回收。
 
-## 四、状态字段（终态只允许真实结果）
+## 四、两个维度：Case Status vs Execution Result（勿混用）
 
-| 状态 | 含义 |
+**Case Status（生命周期，写在 Frontmatter `status`）**：
+`pending_review` / `ready` / `running` / `completed` / `failed` —— 定义与状态机见 `rules/case-store-rule.md §三`。
+
+**Execution Result（单次执行结果，写在报告与汇总视图）**：
+
+| 记号 | 含义 |
 |------|------|
 | ✅ PASS | 真实执行通过 |
-| ❌ FAIL | 真实执行失败（须附失败归因与疑似源码位置） |
-| ⚠ BLOCKED | 输入/环境/权限缺失，无法执行 |
+| ❌ FAIL | 真实执行失败（业务断言失败，须附失败归因与疑似源码位置） |
+| ⚠ BLOCKED | 输入/环境/权限/数据占位符缺失，无法执行 |
 | 🚫 DEPRECATED | 已废弃 |
+| ⛔ ERROR | 自动化脚本/基础设施异常（对应 Case Status `failed`） |
 
 严禁以 🟡待执行 作为执行完成后的终态。
+**严禁**把业务断言失败写成 `status: failed`（正确写法：`status: completed` + `last_run_status: FAIL`）。
 
 ## 五、回写（Step9）
 
-执行后按运行结果回写每条用例的：状态、最近执行时间、执行命令引用、
-证据路径（截图/日志片段/数据库字段变化）、失败归因（如有）。
+- **Case 资产**：只做**最小化 Frontmatter 回写**（`status` / `updated_at` / `last_run_id` /
+  `last_run_status`），正文与测试数据一律不动（见 `rules/case-store-rule.md §五`）。
+- **模块汇总视图**：按运行结果回写每条用例的执行结果、最近执行时间、执行命令引用、
+  证据路径（截图/日志片段/数据库字段变化）、失败归因（如有）。
+- **详细执行结果不写进 Case 文件**，只进 `<reportDir>/RUN-*.md`（见 `rules/report-rule.md`）。
 
 ## 六、覆盖要求
 
@@ -68,6 +90,9 @@ ID 一经分配不得复用/重排。
 
 ## 八、数据变体默认检查清单（强制，每条可输入用例都要考虑）
 
+> 落地形式：清单中每个被采用的类别 → Test Data Matrix 的一个**数据组**（具体真实值），
+> 写法与解析见 `rules/test-data-rule.md`。**类别名只能出现在「数据特征」列，不能当测试数据用。**
+>
 > 不得只用文档给的"正常数据"。每条涉及输入的用例，都要主动设计多组数据变体。
 > 会真实写库的变体，用**不存在的标识**触发校验分支，或用 `<dataIsolationPrefix>`（默认 `TEST_AUTO_*`）隔离，
 > 避免污染真实数据（见 `rules/environment-rule.md`）；无 DB 回滚工具时尤其如此。

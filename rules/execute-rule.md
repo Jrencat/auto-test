@@ -4,6 +4,15 @@
 
 > 命令与工作目录来自绑定 `project.json.commands`（cwd = `<frontend>`，见 runtime.local.json）。
 
+## 零、执行前置：批次 ID 与状态置位
+
+1. **生成批次 ID**：`RUN-YYYYMMDD-HHMMSS`（`node tests/support/caseStore.ts run-id`），
+   通过环境变量 `AUTO_TEST_RUN_ID` 下发给 Playwright，使所有执行记录归入同一批次。
+2. **状态置位**：把本次要执行的 Case 从 `ready → running`（最小化回写）。
+   - 只有 `ready`（或上次中断残留的 `running`）能进入执行。
+   - `pending_review` 用例**一律不执行**，在报告标 Not Executed（待人工审核）。
+   - 非法转换（如 `pending_review → running`）必须直接报错终止，不得放行。
+
 ## 一、执行（Step7）
 
 优先执行项目已有命令（见绑定 `project.json.commands`）：
@@ -30,6 +39,20 @@
 - **调试脚本即用即删**：为定位环境问题临时新建的 `_debug.*.spec.ts` 等文件，定位完成后必须删除，
   不得留在 `<frontend>/tests/` 目录污染正式套件。
 
+## 一点五、执行后状态回写（Step9）与失败类型区分（强制）
+
+| 实际情况 | Case Status | Execution Result | Failure Type |
+|---------|-------------|------------------|--------------|
+| 用例跑完，断言全过 | `completed` | `PASS` | — |
+| 用例跑完，**业务断言失败** | `completed` | `FAIL` | `Assertion Failure` |
+| Playwright 启动失败 / 脚本语法错误 / 浏览器起不来 / 测试环境不可用 | `failed` | `ERROR` | `Automation Error` |
+| 数据占位符未补 / 权限缺失 / 数据空档，未执行 | 保持原状态 | `BLOCKED` | `Blocked` |
+
+- **`completed ≠ PASS`**：只要测试正常跑完，哪怕断言全红，Case Status 也是 `completed`。
+- **严禁**把业务断言失败写成 `status: failed`——那会把产品缺陷伪装成自动化故障，掩盖真实问题。
+- 回写只改 `status` / `updated_at` / `last_run_id` / `last_run_status` 四个字段，
+  正文与人工修改内容一律不动（见 `rules/case-store-rule.md §五`）。
+
 ## 二、失败归因（重试仍失败）
 
 将失败归类为其一，并**定位疑似源码位置**（file:line）：
@@ -45,6 +68,9 @@
 
 ## 三、证据收集（Step8）与 Token 控制
 
+- **逐数据组写执行记录**（强制）：每个 Data Group 执行完立即 `recordResult()` 追加到
+  `<reportDir>/<RunId>.jsonl`，字段含 Case ID / Data Group ID / **实际输入数据** / 预期 / 实际 /
+  Result / Failure Type / 耗时 / spec 文件。报告阶段直接聚合该文件，杜绝"报告与实际执行对不上"。
 - **日志仅保留最后 20 行**。
 - **截图仅保留相对路径**（Playwright 失败自动截图，位于 `<frontend>/playwright-report/` / `test-results/`）。
 - **数据库仅输出关键字段变化**：绑定 `assertLayers.database.keyFields` 指定的字段（操作前 → 操作后）。

@@ -16,7 +16,12 @@
    依赖服务、DB 工具。缺硬依赖 → 输出安装命令并 BLOCKED（**提示安装，不自动安装**）。
 3. **项目绑定解析**（`rules/binding-rule.md`）：解析/探测/交互得到前后端路径与技术栈画像，
    刷新 `<cwd>/.claude/auto-test/runtime.local.json`（含前后端**当前分支**），幂等生成前端脚手架。
-4. 读取**目标项目**规范并遵循（冲突时项目规范优先）：`CLAUDE.md`、`.claude/rules/*`、`MEMORY.md`（如存在）。
+4. **执行模式解析**（`rules/mode-rule.md`）：`--mode` 参数 → 自然语言已明确 → 绑定
+   `execution.defaultMode` → 交互询问（**只问一次**，用户已明确则不得再问）。解析结果 `log` 一行。
+5. **用例资产扫描**（`rules/case-store-rule.md`）：读取 `<caseDir>`（默认 `<cwd>/.auto-test/cases/`）
+   全量 Case 的 Frontmatter，按 `status` 分组统计（`pending_review` / `ready` / `running` / `completed` / `failed`）。
+   缺目录则创建空目录。此步产出决定后续路由（见 §模式路由）。
+6. 读取**目标项目**规范并遵循（冲突时项目规范优先）：`CLAUDE.md`、`.claude/rules/*`、`MEMORY.md`（如存在）。
 
 > 路径来源：所有 `<frontend>`/`<backend>`/命令 cwd/页面文档目录，均来自
 > `<cwd>/.claude/auto-test/project.json` + `runtime.local.json` + `<frontend>/tests/.env.test`，
@@ -48,12 +53,41 @@
   用于源码定位、TestCase 目录 `docs/testcases/<module>/`、脚本命名。
 - 若清单为空或路径不存在：输出 BLOCKED，提示用户重新提供路径或改用选项 B。
 
+## 模式路由（在意图路由之前判定，决定本次是否执行、是否挂起）
+
+> 规则正文见 `rules/mode-rule.md`。本节只做路由。
+
+### Full-Auto
+
+```
+存在 ready 用例？
+ ├─ 是 → 优先执行 ready 用例（跳过生成，避免重复 Case）
+ └─ 否 → 分析目标 → 去重 → 生成用例（status=ready）→ 执行
+磁盘上已有的 pending_review 用例：不执行、不改状态，列入报告 Not Executed（待人工审核）
+```
+
+### Human-in-the-Loop
+
+```
+存在 pending_review？
+ ├─ 是 → 展示待审核清单 + 测试数据摘要 + 审核指引 → 🛑 退出 CLI（本次不执行任何测试）
+ └─ 否 ↓
+存在 ready？
+ ├─ 是 → 提示「检测到 N 个已审核、待执行的测试用例。是否开始执行？[Y/n]」→ 确认后执行
+ └─ 否 → 分析目标 → 生成用例 + **具体测试数据** → status=pending_review → 写盘
+          → 输出文件清单 + 审核指引 → 🛑 退出 CLI
+```
+
+**硬性**：Human-in-the-Loop 生成 `pending_review` 后**必须真正停止**，不得在同一次运行内继续执行；
+`pending_review → ready` 只能由人工修改磁盘文件完成，Skill 不得代劳，也不得提供"一键全部置 ready 并执行"的默认路径。
+
 ## 意图路由
 
 | 用户意图 | 调度规则 |
 |---------|---------|
 | 新模块 / 提供页面·接口·流程·需求文档 | 走完整闭环（下方"闭环调度"全序列） |
-| 只补 / 改 TestCase | `rules/testcase-rule.md` + `templates/testcase-*.md` |
+| 恢复执行（已有 ready 用例） | `rules/case-store-rule.md` → Step7 起（跳过 Step3~Step5 的重复生成） |
+| 只补 / 改 TestCase | `rules/case-store-rule.md` + `rules/testcase-rule.md` + `templates/case.md` |
 | 只补 / 改自动化脚本 | `rules/script-rule.md`（复用 `<frontend>/tests/`） |
 | 执行 / 回归 / 重跑 | `rules/execute-rule.md` → `rules/report-rule.md` |
 | 失败修复 | `rules/execute-rule.md`（失败归因）→ 定位源码 → 回到脚本/用例 |
@@ -64,21 +98,30 @@
 ```
 Step-1 依赖预检                  → rules/preflight-rule.md（缺硬依赖 BLOCKED + 安装命令）
 Step0  项目绑定解析/探测/交互    → rules/binding-rule.md（前后端路径 + 分支 + 脚手架生成）
-Step0.5 解析测试页面来源(可多路径) → 本 Prompt §输入来源解析
+Step0.1 执行模式解析             → rules/mode-rule.md（--mode / 自然语言 / 默认 / 只问一次）
+Step0.2 扫描 .auto-test/cases/   → rules/case-store-rule.md（按 status 分组；决定生成 or 恢复执行）
+Step0.5 解析测试页面来源(可多路径) → 本 Prompt §输入来源解析（已走"恢复执行"分支时可跳过）
 Step1  输入完整性检查            → rules/auto-test-agent.md §Step1
 Step2  环境探测 + 真实渲染探测 + 并发安全 → rules/environment-rule.md
 Step3  源码分析：三层断言 + 变体维度识别/矩阵 + 动态取号 → rules/source-analysis-rule.md
-Step4  读取历史 TestCase         → rules/testcase-rule.md
-Step5  增量维护 TestCase(含VARIANT矩阵+数据变体+断言模式库) → rules/testcase-rule.md + templates/testcase-*.md + templates/assertion-patterns.md
-Step6  增量维护脚本(含参数化变体矩阵) → rules/script-rule.md
-Step7  真实执行(串行+隔离)        → rules/execute-rule.md
-Step8  收集日志/截图/数据库断言  → rules/execute-rule.md + 绑定(断言字段)
-Step9  回写 TestCase 状态(含归因分类) → rules/testcase-rule.md
-Step10 生成客户交付版执行报告   → rules/report-rule.md + templates/report.md
+Step4  读取历史 Case + 去重判定   → rules/case-store-rule.md §六
+Step5  生成/增量维护 Case(含具体测试数据矩阵 + VARIANT + 数据变体 + 断言模式库)
+                                 → rules/case-store-rule.md + rules/test-data-rule.md
+                                   + rules/testcase-rule.md + templates/case.md + templates/assertion-patterns.md
+Step5.5 🛑 HITL 挂起点            → rules/mode-rule.md：Human-in-the-Loop 在此写盘 pending_review、
+                                   输出审核指引并**退出**；Full-Auto 直接继续
+Step6  增量维护脚本(数据驱动 + 参数化变体矩阵) → rules/script-rule.md + rules/test-data-rule.md §六
+Step7  真实执行(串行+隔离，ready→running) → rules/execute-rule.md
+Step8  收集日志/截图/数据库断言 + 逐数据组写 Run 记录 → rules/execute-rule.md
+Step9  回写 Case 状态(running→completed/failed，最小化改写) → rules/case-store-rule.md §五
+Step10 生成批次 Run Report + 客户交付版报告 → rules/report-rule.md + templates/run-report.md + templates/report.md
 Step11 最终 Gate + Self Review  → rules/report-rule.md §Final Gate / §Self Review
 ```
 
-仅在 BLOCKED（依赖缺失 / 输入缺失 / 环境不可用 / 权限不足 / 用户终止）时暂停。
+暂停点仅两类：
+1. **BLOCKED**：依赖缺失 / 输入缺失 / 环境不可用 / 权限不足 / 用户终止；
+2. **HITL 挂起（Step5.5）**：Human-in-the-Loop 模式下的人工审核等待——这是**设计内的正常终止**，
+   不是失败，输出审核指引后干净退出。
 
 **默认姿态（无需用户逐次提示）**：追求"覆盖所有位置"的完备测试 + 输出可直接交付客户的完备报告。
 即：主动识别多分支变体页面并全取值覆盖（Step3/5/6）、每条输入用例做数据变体（Step5）、
@@ -101,6 +144,10 @@ Step11 最终 Gate + Self Review  → rules/report-rule.md §Final Gate / §Self
 
 ## 输出纪律
 
-- 状态只允许来自真实执行：✅PASS / ❌FAIL / ⚠BLOCKED / 🚫DEPRECATED；禁止"🟡待执行"作为终态。
+- **Case Status 与 Execution Result 分开表述**：状态用 `pending_review/ready/running/completed/failed`；
+  执行结果用 PASS / FAIL / ERROR / BLOCKED。`completed ≠ PASS`，业务断言失败不得写成 `status: failed`。
+- 执行结果只允许来自真实执行：✅PASS / ❌FAIL / ⚠BLOCKED / 🚫DEPRECATED；禁止"🟡待执行"作为终态。
+- **测试数据一致性**：报告里的"实际输入数据"必须来自执行时的真实取值（`RUN-*.jsonl`），
+  禁止从用例文档誊抄冒充实际输入。
 - Token 控制：历史 PASS 用例仅引用；日志最多 20 行；截图仅留路径；已存在用例/脚本只输出 Diff。
 - 遵守安全边界与环境恢复（`rules/environment-rule.md`）。

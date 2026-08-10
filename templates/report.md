@@ -6,6 +6,8 @@
 > 环境/端口/账号等具体值来源：`<cwd>/.claude/auto-test/project.json` + `runtime.local.json` + `tests/.env.test`。
 
 - **报告版本**：<v1 / v2…（多轮迭代时标明演进）>
+- **Run ID**：<RUN-YYYYMMDD-HHMMSS（对应 `.auto-test/reports/` 下的批次报告）>
+- **执行模式**：<full-auto / human-in-the-loop>
 - **生成时间**：<YYYY-MM-DD>
 - **测试范围**：<页面/接口/流程/需求文件路径 + 数据变体扩展说明>
 - **环境**：<local / test / uat>
@@ -157,6 +159,8 @@
 
 ## 九、输出文件
 
+- `.auto-test/cases/TC-*.md`（用例资产 SSOT，本轮新增/更新清单）
+- `.auto-test/reports/<Run ID>.md` + `<Run ID>.jsonl`（本轮批次报告与执行记录）
 - docs/testcases/<module>/E2E_业务主流程用例.md
 - docs/testcases/<module>/API_接口测试用例.md
 - docs/testcases/<module>/IMPORT_专项测试用例.md

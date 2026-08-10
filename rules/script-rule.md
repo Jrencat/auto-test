@@ -11,8 +11,11 @@
 <frontend>/tests/
 ├── api/    *.api.spec.ts     # 接口测试（project=api）
 ├── e2e/    *.e2e.spec.ts     # UI 端到端（project=e2e）
-└── support/                  # 基建：env / crypto / auth.setup / fixtures（勿随意改动）
+└── support/                  # 基建：env / crypto / auth.setup / fixtures / caseStore（勿随意改动）
 ```
+
+`support/caseStore.ts` 提供 Case 资产读写：`loadExecutableCases()` / `parseDataMatrix()` /
+`recordResult()` / `updateFrontmatter()`（见 `rules/case-store-rule.md`、`rules/test-data-rule.md`）。
 
 命名：`<module>.<scenario>.{api|e2e}.spec.ts`，例如
 `order-module.list.e2e.spec.ts`、`order-module.list.api.spec.ts`。
@@ -89,6 +92,52 @@ await noInput.press('Enter');         // 触发查询
 await authedPage.waitForLoadState('networkidle');
 await authedPage.waitForTimeout(500);
 ```
+
+### 🔗 Case 数据组驱动骨架（强制：测试数据必须真正驱动 Playwright）
+
+对 `.auto-test/cases/` 中 `status=ready` 的用例，**输入一律取自 Test Data Matrix 的数据组**，
+禁止在脚本里另写字面量导致"文档写 A、实际跑 B"：
+
+```ts
+import { test, expect } from '../support/fixtures';
+import { loadExecutableCases, recordResult } from '../support/caseStore';
+
+// loadExecutableCases() 只返回 ready / running 的用例 —— pending_review 天然不会被执行
+for (const tc of loadExecutableCases().filter((c) => c.frontmatter.module === '<module>')) {
+  for (const g of tc.dataGroups) {
+    test(`${tc.frontmatter.id} - ${g.id} - ${g.traits.join('/')}`, async ({ gotoRoute, authedPage }) => {
+      const t0 = Date.now();
+      let actual = '';
+      try {
+        await gotoRoute(String(tc.frontmatter.route ?? '<module>/<page>'));
+        await authedPage.waitForLoadState('networkidle');
+        // ⚠ 只用 g.input 的值填充，字段名对应 Matrix 的「字段名称」列
+        for (const [field, value] of Object.entries(g.input)) {
+          await authedPage.fill(`[data-test="${field}"], input[name="${field}"]`, value);
+        }
+        await authedPage.click('button[type=submit]');
+        actual = (await authedPage.locator('.ant-message, .ant-form-item-explain').first().innerText()).trim();
+        expect(actual, `数据组 ${g.id} 期望：${g.expected}`).toContain(g.expected);
+        recordResult({ caseId: String(tc.frontmatter.id), caseTitle: String(tc.frontmatter.title), groupId: g.id,
+          input: g.input, expected: g.expected, actual, result: 'PASS', durationMs: Date.now() - t0, specFile: __filename });
+      } catch (e) {
+        const isAssertion = e instanceof Error && /expect|toContain|toBe|toHave/.test(String(e.message));
+        recordResult({ caseId: String(tc.frontmatter.id), caseTitle: String(tc.frontmatter.title), groupId: g.id,
+          input: g.input, expected: g.expected, actual, result: isAssertion ? 'FAIL' : 'ERROR',
+          failureType: isAssertion ? 'Assertion Failure' : 'Automation Error',
+          error: String(e), durationMs: Date.now() - t0, specFile: __filename });
+        throw e;
+      }
+    });
+  }
+}
+```
+
+要点：
+- **一个数据组 = 一条 test**，互不影响；test 标题必须含 `Case ID + Data Group ID`，报告才可反查。
+- 项目 Runner 已有 `test.each()` 等数据驱动机制时**优先复用**，不必改用上述循环。
+- 含 `TODO` / `REQUIRED_INPUT` 的数据组（`g.hasPlaceholder`）**跳过并记 BLOCKED**，不得猜值执行。
+- 完整口径见 `rules/test-data-rule.md §六`。
 
 ### 🧬 变体矩阵参数化 E2E 骨架（多分支页面通用）
 
