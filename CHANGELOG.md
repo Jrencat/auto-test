@@ -13,6 +13,11 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-27
+
+在既有 FAIL 路径上增强诊断纪律与证据准入。**未新建 Skill、未新增文件、未改测试用例格式、
+未改覆盖策略与测试语义**；改动集中在 4 个既有 rules 文件。
+
 ### 新增 — FAIL 诊断纪律
 
 - `rules/execute-rule.md §二` 从「六选一失败归因」重构为**分级诊断闭环**：
@@ -21,6 +26,9 @@
   `INFRASTRUCTURE_BUG` / `ENVIRONMENT_BUG` / `FLAKY` / `TEST_DATA_BUG` / `UNKNOWN` 默认禁止进入源码定位链，
   避免简单失败触发完整的「前端→Router→API→Controller→Service→Mapper→XML→DB」八层检索。
 - **Evidence Gate**：没有该类要求的证据就不许写该类结论；证据不足时唯一合法结论是 `UNKNOWN` + 下一步所需证据。
+- **第 4 行与第 5/6 行的依赖**：判定 `TEST_DATA_BUG` 必须先做接口核实；核实结果为「数据存在且状态符合」
+  则该行未命中，且该结果即作为第 5/6 行「接口层数据正确」的证据。未核实不得进入第 5/6 行，
+  也不得下 `TEST_DATA_BUG`。
 - **可证伪假设**：第 5/6/7 类需 2–4 个假设，每个必须写出证伪条件；"可能是前端/后端/数据"不算假设。
 - **Diagnostic Budget**：每次扩大 Context 需回答五问；新增信息不能区分假设则立即 STOP。
 - `PRODUCT_BUG` 增加两条护栏（源自真实误判回放）：②脚本口径须含请求体必填字段与前端真实交互路径一致；
@@ -34,6 +42,9 @@
 - `rules/execute-rule.md §三点一`：原始证据完整落盘、可追溯，但**禁止整份进入 LLM**。
   `index.html` 永不入 LLM；`results.json` 必须先经**投影命令**（复用已配置的 json reporter，零新增依赖）
   提取 `unexpected` / `flaky` 子集与前 8 行错误后再入 LLM；trace/截图只入相对路径。
+- json 路径取 `playwright.config.ts` 中 reporter 配置的 `outputFile`（默认 `playwright-report/results.json`）。
+  文件不存在或解析失败时记 `UNKNOWN` 或 `INFRASTRUCTURE_BUG` 并写明缺失路径，
+  **不得**改读 `index.html`、完整终端输出或整份 json。
 
 ### 变更
 
@@ -118,5 +129,6 @@
 
 - `README.md` / `USAGE.md` / `configs/project.schema.md` / `LICENSE`（MIT）/ `.gitignore`。
 
-[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Jrencat/auto-test/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Jrencat/auto-test/releases/tag/v1.0.0
