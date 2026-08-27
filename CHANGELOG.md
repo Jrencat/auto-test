@@ -13,6 +13,47 @@
 
 ## [Unreleased]
 
+### 新增 — FAIL 诊断纪律
+
+- `rules/execute-rule.md §二` 从「六选一失败归因」重构为**分级诊断闭环**：
+  TRIAGE → REPRODUCE → EVIDENCE → HYPOTHESIS → VERIFY → ROOT CAUSE → [FIX] → RETEST → REGRESSION。
+- **TRIAGE 分流表**（8 类）：每类规定**最小充分证据**、**是否允许读源码**、**STOP 条件**。
+  `INFRASTRUCTURE_BUG` / `ENVIRONMENT_BUG` / `FLAKY` / `TEST_DATA_BUG` / `UNKNOWN` 默认禁止进入源码定位链，
+  避免简单失败触发完整的「前端→Router→API→Controller→Service→Mapper→XML→DB」八层检索。
+- **Evidence Gate**：没有该类要求的证据就不许写该类结论；证据不足时唯一合法结论是 `UNKNOWN` + 下一步所需证据。
+- **可证伪假设**：第 5/6/7 类需 2–4 个假设，每个必须写出证伪条件；"可能是前端/后端/数据"不算假设。
+- **Diagnostic Budget**：每次扩大 Context 需回答五问；新增信息不能区分假设则立即 STOP。
+- `PRODUCT_BUG` 增加两条护栏（源自真实误判回放）：②脚本口径须含请求体必填字段与前端真实交互路径一致；
+  ⑤须排除"仅自动化环境可复现"，缺 ⑤ 归 `UNKNOWN` 并标「疑似自动化环境专属」，不得报为产品缺陷。
+- 诊断探针统一命名 `_diag-<caseId>.ignore.ts`（不匹配 `testMatch`，天然不入正式套件），按 glob 一次清理。
+- **PASS 路径不变**：PASS 不进入诊断，不产生额外根因分析成本；Full-Auto 未新增任何人工确认点；
+  默认仍为「仅定位与记录，不改业务代码」。
+
+### 新增 — 证据准入（Context Admission）
+
+- `rules/execute-rule.md §三点一`：原始证据完整落盘、可追溯，但**禁止整份进入 LLM**。
+  `index.html` 永不入 LLM；`results.json` 必须先经**投影命令**（复用已配置的 json reporter，零新增依赖）
+  提取 `unexpected` / `flaky` 子集与前 8 行错误后再入 LLM；trace/截图只入相对路径。
+
+### 变更
+
+- **FLAKY 语义化**：`retries: 1` 的 retry-转-PASS 不再静默当稳定 PASS ——
+  Execution Result 记 `PASS`、Failure Type 记 `FLAKY`，进 TRIAGE 并在报告单独列出（`execute-rule §一点五`、`report-rule §二点五`）。
+- **报告证据来源双轨化**（`report-rule §零`）：A 轨（已接入 case-store）用 `RUN-*.jsonl`；
+  B 轨（未接入）用投影输出 + spec 结构化日志，"实际输入数据"如实标 `N/A（未接入 case-store）`，
+  Final Gate 相应标注降级，不得伪装成已满足。消除了「规则要求聚合 `RUN-*.jsonl`，而未接入项目根本不存在该文件」的矛盾。
+- **Final Check Gate 去重**：唯一事实来源改为 `report-rule §五`（19 条）；
+  `auto-test-agent §Gate` 只保留 5 条前置/资产类条目并指向前者，消除两份清单各自漂移。
+- **`TEST_PAGE_DOC_DIR` 默认值统一**为 `docs/test-pages/`（此前 `binding-rule` 两处写作 `docs/测试/`，与
+  SKILL / orchestrator / 脚手架 example 不一致）。
+
+### 未采纳（有意拒绝，避免过度设计）
+
+- Cache、独立 filter CLI、Subagent 拆诊断、新增 Case 状态/Frontmatter 字段、Progressive Disclosure 重建：
+  均无可观测的真实浪费证据，或复杂度高于收益。
+- **Model Routing：不实施** —— Skill 层无阶段级模型选择原语，无法实证 Total Cost 下降，且无 Fallback 设计。
+- Case Store 迁移（安装 `caseStore.ts` + 改造既有 spec 为数据驱动）：收益真实但改动大、触碰在役测试脚本，**延期**。
+
 ## [1.0.0] - 2026-08-27
 
 首个正式发布版本。auto-test 是面向 Claude Code 的自动化测试闭环编排引擎，

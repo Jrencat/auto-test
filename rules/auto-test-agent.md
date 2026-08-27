@@ -117,28 +117,20 @@ Emoji/多语言/负数/超上限/重复/不存在/未登录/无效token/并发/�
 驱动用例的单号/编号**执行前动态查询**当前有效值，不依赖文档静态快照（会过期）——
 见 `rules/source-analysis-rule.md §1.6`。
 
-## 🏁 Final Check Gate（详见 rules/report-rule.md）
+## 🏁 Final Check Gate
 
-完成前必须全部满足，否则不得输出"任务完成"，只能继续执行或输出 BLOCKED：
+> **完整清单的唯一事实来源是 `rules/report-rule.md §五 Final Check Gate`**（执行/证据/报告类条目全部在那里维护，
+> 此处不再重复，避免两份清单各自漂移）。完成前必须逐项确认，任一未完成不得输出"任务完成"，
+> 只能继续执行或输出 BLOCKED。
+
+本文件只额外守住 `report-rule` 覆盖不到的**前置与资产类**条目：
+
 - [ ] 已完成依赖预检与绑定解析（前后端路径与分支已确认）
-- [ ] 已确定并声明本次 Execution Mode
-- [ ] 已扫描 `.auto-test/cases/` 并完成**去重判定**（无重复生成的等价 Case）
-- [ ] `pending_review` 用例**未被自动执行**、未被覆盖、未被 Skill 擅自改为 `ready`
+- [ ] 已扫描 `<caseDir>`（默认 `.auto-test/cases/`）并完成**去重判定**（无重复生成的等价 Case）
 - [ ] Case 的测试数据是**具体可执行**的真实数据（无"输入合法用户名"式抽象描述、无编造的业务标识）
-- [ ] Test Data Matrix **真正驱动**了 Playwright（脚本输入取自数据组，非脚本内字面量）
-- [ ] Case Status 与 Execution Result 未混用（业务断言失败为 `completed`+`FAIL`，非 `failed`）
+- [ ] Test Data Matrix **真正驱动**了 Playwright（脚本输入取自数据组，非脚本内字面量）——
+      未接入 case-store 的项目按 `rules/report-rule.md §零` B 轨如实标注降级，不得伪装成已满足
 - [ ] 状态回写为**最小化改写**（正文、未知字段、人工修改均无损）
-- [ ] 本次执行已生成独立的 `RUN-YYYYMMDD-HHMMSS` 批次报告（历史报告未被覆盖）
-- [ ] 已分析源码，**已识别多分支变体页面并构建变体矩阵**
-- [ ] 已维护 TestCase（含 VARIANT 矩阵 + 数据变体 + 适用页面的断言模式库用例）
-- [ ] 已维护脚本（含参数化变体矩阵）
-- [ ] **已做真实渲染探测**（确认非白屏假通过）
-- [ ] 已真实执行测试（串行+隔离）
-- [ ] 已完成数据库断言（无 DB 工具时标 Not Executed 并说明）
-- [ ] 已回写 PASS/FAIL/BLOCKED/Not Executed（含归因分类）
-- [ ] **变体矩阵每一行都有真实结果或 BLOCKED/Not Executed 说明**（无静默跳过）
-- [ ] 已执行 Teardown
-- [ ] 已生成**客户交付版**测试报告并通过 Self Review
 
 ## 子规范索引
 

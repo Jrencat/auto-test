@@ -43,7 +43,8 @@
 3. **交互询问**（仍无法确定时，需求 4）：用 **AskUserQuestion** 请用户输入：
    - 前端项目**绝对路径**（必填）
    - 后端项目**绝对路径**（可选；无则 DB/后端源码断言相应降级）
-   - 页面文档目录（可选，默认 `docs/测试/`，最终写入 `.env.test` 的 `TEST_PAGE_DOC_DIR`）
+   - 页面文档目录（可选，默认 `docs/test-pages/`，最终写入 `.env.test` 的 `TEST_PAGE_DOC_DIR`；
+     目标项目实际目录名不同时（如 `docs/测试/`）按实际填写）
 4. 生成/更新 `project.json`（缺失时以 `templates/binding/project.template.json` 为底，填入探测到的目录名）
    与 `.gitignore`（写入 `runtime.local.json`）。
 
@@ -92,7 +93,7 @@
 然后在 tests/.env.test 填写：
   - 地址：TEST_API_BASE / TEST_WEB_BASE（网关与前端 dev 地址）
   - 账号：TEST_USERNAME / TEST_PASSWORD（务必用测试环境账号）
-  - 页面文档目录：TEST_PAGE_DOC_DIR（默认 docs/测试/，可改）
+  - 页面文档目录：TEST_PAGE_DOC_DIR（默认 docs/test-pages/，按项目实际目录改）
 配置完成后重新运行 /auto-test。
 ```
 
