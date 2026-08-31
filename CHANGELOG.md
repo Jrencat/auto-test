@@ -13,6 +13,56 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-31
+
+Repeat Run 与执行统计成本优化。**未新建 Skill、未新增文件、未改测试用例格式、未改覆盖策略与测试语义**；
+`rules/execute-rule.md §二`（FAIL 诊断闭环）逐字未变。改动集中在 5 个既有文件：
+`rules/case-store-rule.md`、`rules/execute-rule.md`、`rules/mode-rule.md`、
+`prompts/orchestrator.md`、`rules/auto-test-agent.md`。
+
+### 新增 — Cheap Reuse Gate（Repeat Run 复用判定）
+
+- `rules/case-store-rule.md §九`：同一模块第二次触发、且已有 `completed`/`failed` Case 时，
+  廉价判定是否可直接复用已完成的分析与生成工作，避免重新走一遍 Step3 八层源码分析 + Step4/Step5 生成。
+- 判定只允许读取 Case Frontmatter 既有字段（`module`/`route`/`script`/`updated_at`）+ 逐仓库
+  `git log --since` / `git status --porcelain` + 文件 `stat`（mtime），不读文件内容，不新增
+  Frontmatter 字段，不建立 Cache/指纹库/新持久化产物。
+- 未跟踪（`??`）文件按 mtime 与 Case `updated_at` 比较判定是否为"上轮执行产物本身"，避免把
+  auto-test 自己生成、尚未提交的脚本误判为"发生了变化"（否则复用永远不会生效）。
+- 三档判定：`NO CHANGE`（REUSE，跳过 Step3/4/5 直接执行）／`IMPACTED`（仅对受影响 Case/Script
+  局部重分析）／`MAJOR STRUCTURAL`（回退全量分析，唯一允许全量的路径）。
+- 复用时正文与测试数据零改动，只回写既有 4 个 Frontmatter 字段（`status`/`updated_at`/
+  `last_run_id`/`last_run_status`）；不无理由重写脚本；覆盖能力（数据组数量/断言/变体矩阵/
+  串行隔离）不变。
+- `prompts/orchestrator.md`、`rules/mode-rule.md`、`rules/auto-test-agent.md` 同步补充
+  Repeat Run 路由，First Run（无历史 Case）路径不受影响。
+
+### 新增 — 分批执行结果投影落盘（Mechanical Statistics）
+
+- `rules/execute-rule.md §三`：`results.json` 由每次 `npx playwright test` 整体重写，分批执行
+  （如 `--project=api` 与 `--project=e2e` 分开跑）时最后一批会覆盖之前批次，此前只能靠人工
+  逐条清点补齐总数。
+- 现在：每批执行结束后立即运行已有投影命令，将该批结果**追加**到本轮
+  `<reportDir>/<RunId>.jsonl`（该文件在 `case-store-rule.md §一` 中已定义，非新增产物），
+  报告阶段的 PASS/FAIL/FLAKY/skipped/duration 统计一律从该 `.jsonl` 聚合求和，禁止为统计
+  重新读取 `results.json`/`index.html`/完整终端输出，禁止由 LLM 手工清点。
+- 不改变证据轨定级：未接入 `caseStore.ts` 的项目依然是 B 轨，不因新增 `.jsonl` 聚合而自称 A 轨。
+
+### 真实项目验证（Repeat Run）
+
+- 在真实业务项目某导出模块上真实触发第二次 `/auto-test`：Gate 判定 `NO CHANGE → REUSE`，
+  Step3 源码分析与 Case/脚本生成均被真实跳过（有执行痕迹，非仅按 Prompt 推断）。
+- 12 个既有 Case 全部复用（新增 0，正文改动 0，覆盖 0）；7 个既有 Playwright 脚本全部复用
+  （新增 0，重写 0）。
+- 50 个数据组全部真实执行（Playwright + 真实渲染探测 + API/DB 验证，串行隔离），结果与
+  First Run 完全一致：49 PASS / 1 FAIL / 0 FLAKY / 0 skipped；唯一 FAIL 为已知问题的
+  同一根因复现。
+
+### 未采纳（有意拒绝，避免过度设计）
+
+- Model Routing、Cache Framework、Subagent、新 CLI、新 State Machine、新 Frontmatter
+  Schema、Case JSON 化、Playwright 并行执行：均未实施，判定复杂度高于当前可观测收益。
+
 ## [1.0.1] - 2026-08-27
 
 在既有 FAIL 路径上增强诊断纪律与证据准入。**未新建 Skill、未新增文件、未改测试用例格式、
@@ -129,6 +179,7 @@
 
 - `README.md` / `USAGE.md` / `configs/project.schema.md` / `LICENSE`（MIT）/ `.gitignore`。
 
-[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/Jrencat/auto-test/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Jrencat/auto-test/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Jrencat/auto-test/releases/tag/v1.0.0
