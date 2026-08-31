@@ -62,9 +62,18 @@
 ```
 存在 ready 用例？
  ├─ 是 → 优先执行 ready 用例（跳过生成，避免重复 Case）
- └─ 否 → 分析目标 → 去重 → 生成用例（status=ready）→ 执行
+ └─ 否 ↓
+存在该模块的 completed / failed 用例？（Repeat Run）
+ ├─ 是 → Cheap Reuse Gate（rules/case-store-rule.md §九，只用 module/route/script + git diff）
+ │        ├─ NO CHANGE        → REUSE：跳过 Step3/4/5，completed|failed → running，直接执行
+ │        ├─ IMPACTED         → 仅对受影响 Case/Script 局部重分析；其余仍 REUSE
+ │        └─ MAJOR STRUCTURAL → 回到下方全量分析路径（唯一允许全量的情况）
+ └─ 否 → 分析目标 → 去重 → 生成用例（status=ready）→ 执行   ← First Run 路径，保持不变
 磁盘上已有的 pending_review 用例：不执行、不改状态，列入报告 Not Executed（待人工审核）
 ```
+
+> **First Run 不受影响**：无历史 Case 时仍走完整分析与生成，覆盖能力不下降。
+> Reuse Gate 只消除"已经做过的分析与生成"，不减少任何测试内容。
 
 ### Human-in-the-Loop
 
@@ -87,6 +96,7 @@
 |---------|---------|
 | 新模块 / 提供页面·接口·流程·需求文档 | 走完整闭环（下方"闭环调度"全序列） |
 | 恢复执行（已有 ready 用例） | `rules/case-store-rule.md` → Step7 起（跳过 Step3~Step5 的重复生成） |
+| 重复运行同一模块（已有 completed/failed 用例） | `rules/case-store-rule.md` §九 Cheap Reuse Gate → NO CHANGE 时 Step7 起 |
 | 只补 / 改 TestCase | `rules/case-store-rule.md` + `rules/testcase-rule.md` + `templates/case.md` |
 | 只补 / 改自动化脚本 | `rules/script-rule.md`（复用 `<frontend>/tests/`） |
 | 执行 / 回归 / 重跑 | `rules/execute-rule.md` → `rules/report-rule.md` |
@@ -100,6 +110,8 @@ Step-1 依赖预检                  → rules/preflight-rule.md（缺硬依赖 
 Step0  项目绑定解析/探测/交互    → rules/binding-rule.md（前后端路径 + 分支 + 脚手架生成）
 Step0.1 执行模式解析             → rules/mode-rule.md（--mode / 自然语言 / 默认 / 只问一次）
 Step0.2 扫描 .auto-test/cases/   → rules/case-store-rule.md（按 status 分组；决定生成 or 恢复执行）
+Step0.3 Repeat Run 复用判定      → rules/case-store-rule.md §九 Cheap Reuse Gate
+                                   （仅当无 ready 且存在 completed/failed；NO CHANGE → 跳至 Step7）
 Step0.5 解析测试页面来源(可多路径) → 本 Prompt §输入来源解析（已走"恢复执行"分支时可跳过）
 Step1  输入完整性检查            → rules/auto-test-agent.md §Step1
 Step2  环境探测 + 真实渲染探测 + 并发安全 → rules/environment-rule.md

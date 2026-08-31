@@ -9,7 +9,9 @@
 1. **生成批次 ID**：`RUN-YYYYMMDD-HHMMSS`（`node tests/support/caseStore.ts run-id`），
    通过环境变量 `AUTO_TEST_RUN_ID` 下发给 Playwright，使所有执行记录归入同一批次。
 2. **状态置位**：把本次要执行的 Case 从 `ready → running`（最小化回写）。
-   - 只有 `ready`（或上次中断残留的 `running`）能进入执行。
+   - 只有 `ready`（或上次中断残留的 `running`）能进入执行；
+     **Repeat Run 例外**：`completed` / `failed` 用例经 `rules/case-store-rule.md §九 Cheap Reuse Gate`
+     判定为 `REUSE` 后，按 §三"合法转换"置 `completed|failed → running` 进入执行（重跑）。
    - `pending_review` 用例**一律不执行**，在报告标 Not Executed（待人工审核）。
    - 非法转换（如 `pending_review → running`）必须直接报错终止，不得放行。
 
@@ -164,6 +166,39 @@ console.log(JSON.stringify({stats:r.stats,failures:out},null,1));"
 - **json 路径取 Playwright 配置的 reporter 输出**（`playwright.config.ts` 的 `reporter` → `json` → `outputFile`，
   默认 `playwright-report/results.json`）。文件不存在或解析失败时：**不得**改读 `index.html`、
   完整终端输出或整份 json；记 `UNKNOWN` 或 `INFRASTRUCTURE_BUG`，写明缺失的路径，进入 §二。
+
+#### ⚠ 分批执行会覆盖 results.json —— 必须每批投影并落盘
+
+`results.json` 由**每一次 `npx playwright test` 调用整体重写**。因此当本轮采用分批执行
+（如 `--project=api` 与 `--project=e2e` 分开跑、或按文件分批重跑）时，
+**最后一批会覆盖掉之前所有批次的结果**，`results.json` 只保留最后一批。
+
+由此产生的真实事故：报告需要的总数（数据组数 / PASS / FAIL / FLAKY / duration）在
+`results.json` 里根本不存在，于是被**人工逐条数出来**——既昂贵又不可复核。
+
+**强制做法**（不新增脚本/CLI/Cache/Schema，只是把已有投影命令的时机与去向固定下来）：
+
+1. **每批执行结束后、下一批开始之前**，立即运行上方投影命令；
+2. 把该批投影结果**追加**（append，禁止覆盖）到本轮已定义的机器记录文件
+   `<reportDir>/<RunId>.jsonl`（该文件在 `rules/case-store-rule.md §一` 已定义，非新增产物），
+   每批一行，含 `batch`（命令）、`stats`、`failures[]`；
+3. 报告阶段的统计**一律从该 `.jsonl` 聚合得出**：
+   `PASS = Σ stats.expected`、`FAIL = Σ stats.unexpected`、`FLAKY = Σ stats.flaky`、
+   `skipped = Σ stats.skipped`、`duration = Σ stats.duration`；
+4. **禁止**为了统计而重新读取 `results.json`、`index.html` 或完整终端输出；
+5. **禁止**由 LLM 手工清点数据组、PASS/FAIL 条数、文件字节数等可机械获得的数字。
+
+```bash
+# 每批执行后立即追加（<RunId> 取 AUTO_TEST_RUN_ID）
+node -e "<上方投影命令>" | node -e "
+const fs=require('fs');let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+  const p=process.argv[1], line=JSON.stringify({batch:process.argv[2],...JSON.parse(s)});
+  fs.appendFileSync(p,line+'\n');});" "<reportDir>/<RunId>.jsonl" "<本批命令>"
+```
+
+> **不改变证据轨定级**：本节只保证"机械统计不再靠人工清点"。
+> 是否为 A 轨仍按 `rules/report-rule.md §零` 判定——投影里**没有逐数据组的实际输入数据**，
+> 因此未接入 `caseStore.ts` 的项目**依然是 B 轨**，不得因为有了 `.jsonl` 就自称 A 轨。
 
 ## 四、数据库断言取值
 

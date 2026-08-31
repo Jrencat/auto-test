@@ -47,7 +47,12 @@
 ```
 触发 → 扫描 <caseDir> → 存在 ready？
   ├─ 是 → 直接执行 ready 用例（优先，不重复生成）
-  └─ 否 → 分析目标 → 去重后生成用例 → status=ready → 执行 → 回写 → 生成 Run Report
+  └─ 否 → 存在该模块 completed / failed？（Repeat Run）
+           ├─ 是 → Cheap Reuse Gate（case-store-rule §九）
+           │        ├─ NO CHANGE        → completed|failed → running → 执行（跳过分析与生成）
+           │        ├─ IMPACTED         → 局部重分析受影响项，其余复用 → 执行
+           │        └─ MAJOR STRUCTURAL → 转下一行全量路径
+           └─ 否 → 分析目标 → 去重后生成用例 → status=ready → 执行 → 回写 → 生成 Run Report
 ```
 
 - 不触发 CLI 挂起、不要求人工修改用例。

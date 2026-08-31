@@ -75,6 +75,8 @@
 
 除 BLOCKED 与 HITL 挂起外不得跳过任何步骤。
 （"恢复执行"分支——已有 `ready` 用例时——可跳过 Step3~Step5 的重复生成，直接进 Step6/Step7。）
+（"Repeat Run"分支——无 `ready` 但已有该模块 `completed`/`failed` 用例时——先过
+`rules/case-store-rule.md §九 Cheap Reuse Gate`；判定 `NO CHANGE` 时同样跳过 Step3~Step5 直接执行。）
 
 ## 📋 Step1：输入完整性检查
 

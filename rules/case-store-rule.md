@@ -190,9 +190,109 @@ last_run_status: FAIL
 
 某 Case 被纳入本次执行前必须满足：
 
-- [ ] `status == ready`（或上次中断残留的 `running`，重跑时重新置位）
+- [ ] `status == ready`（或上次中断残留的 `running`，重跑时重新置位），
+      **或** `status == completed` / `failed` 且已通过 §九 Cheap Reuse Gate 判定为 `REUSE`
+      （重跑复用，按 §三"合法转换"置 `→ running`）
 - [ ] 存在可解析的 Test Data Matrix，或用例明确标注"无参数化数据"
 - [ ] 数据组中不含 `TODO` / `REQUIRED_INPUT` 占位符（含则该 Case 保持 `pending_review` 或标 BLOCKED 并说明）
 - [ ] 已有对应自动化脚本，或本轮可生成（见 `rules/script-rule.md`）
 
 不满足的用例：**不执行**，在 Run Report 中标 `BLOCKED` 并写明原因，禁止标成 Pass。
+
+## 九、Repeat Run —— Cheap Reuse Gate（`completed` / `failed` 用例的复用判定）
+
+> 解决的问题：同一模块第二次触发时，磁盘上的 Case 已是 `completed`，既不匹配"存在 `ready`"的
+> 复用分支，又过不了 §八 的可执行性检查，导致**重新走一遍 Step3 八层源码分析 + Step4/Step5 生成**。
+> 本节给出**廉价**的复用判定，使 Repeat Run 直接进入执行。
+
+**触发条件**（三条全满足才进入本节）：
+1. 本次目标模块在 `<caseDir>` 存在 `status == completed` 或 `failed` 的 Case；
+2. 该模块**不存在** `ready` 用例（存在则走原有 ready 分支，本节不介入）；
+3. 当前为 Full-Auto，或 HITL 下用户已确认执行。
+
+### 9.1 允许的输入（白名单，禁止扩大）
+
+判定**只允许**读取下列内容：
+
+| 输入 | 来源 | 成本 |
+|------|------|------|
+| `module` / `route` / `script` | Case Frontmatter **已有字段** | 已在 Step0.2 全量读取，零额外成本 |
+| `updated_at` | Case Frontmatter 已有字段，作为 diff 时间基线 | 同上 |
+| 上述 `route` / `script` 对应路径的 **git diff** | `git log --since` + `git status --porcelain` | 每仓库 2 条命令，不读文件内容 |
+| `script` 文件、`route` 目标目录的**存在性与 mtime** | 文件系统 `stat` | 可忽略，不读内容 |
+
+**🚫 判定阶段严禁**（违反即为设计失败）：
+- 新增任何 Frontmatter 字段（含 `api` / `hash` / `fingerprint` 等）——Case Schema 不得改动；
+- 重新执行 Step3 的八层源码分析（Vue→Router→API→Controller→Service→Mapper→XML→DB）；
+- 为判断能否复用而重新分析整个模块、读 Controller/Service/Mapper/XML、查数据库；
+- 建立任何 Cache、指纹库、状态文件或新的持久化产物。
+
+> **成本红线**：若 Reuse Gate 本身比重新生成 Case 更昂贵，视为设计失败，必须退回本节重新裁剪。
+
+### 9.2 判定命令（`<paths>` 见 9.3）
+
+⚠ **`<cwd>` 不一定是 git 仓库**：monorepo/多仓项目里 `<frontend>` 与 `<backend>`
+（`runtime.local.json`）常是**各自独立的仓库**，而 `<cwd>` 只是它们的父目录。
+因此**必须按仓库分别执行**，用 `git -C <repo>`，**不得**只在 `<cwd>` 跑一次：
+
+```bash
+# 对 <frontend> / <backend> 各执行一次（repo 取 runtime.local.json 中的目录）
+git -C <repo> rev-parse --show-toplevel                                          # 先确认是仓库
+git -C <repo> log --since="<updated_at>" --pretty=format: --name-only -- <paths> | sort -u
+git -C <repo> status --porcelain -- <paths>
+```
+
+- 两条命令对所有仓库都为空 → 无变化；任一非空 → 按 9.4 分档。
+- **某个仓库不可用 / 不是 git 仓库 / 命令失败** → **仅该仓库覆盖的路径**降级为
+  `MAJOR STRUCTURAL`，其余仓库的判定结果照常有效（避免父目录非仓库时整体误判为全量分析）。
+- `<paths>` 为**相对该仓库根**的路径（`script` 相对 `<frontend>`，页面 glob 同理）。
+
+#### ⚠ 未跟踪（`??`）文件不等于"发生了变化"
+
+auto-test 生成的脚本通常**尚未提交**，`git status` 恒为 `??`。若把 `??` 直接当作变更，
+则 First Run 之后的每一次 Repeat Run 都会把全部 Case 判成 `IMPACTED`，
+**复用永远不会生效**（等价于优化失效）。因此：
+
+| `git status` 码 | 含义 | 判定 |
+|-----------------|------|------|
+| ` M` / `M ` / `MM` / `AM` / `D ` / ` D` | 已跟踪文件被修改或删除 | **计入变更** |
+| `??`（未跟踪） | 多为本 Case 自己上一轮生成的产物 | **不直接计入**；改用下方 mtime 判据 |
+
+**未跟踪文件的 mtime 判据**（一次 `stat`，不读文件内容，成本可忽略）：
+
+```
+mtime(<script>) > updated_at(Case)  → 该文件在上轮执行之后被改动 → 计入变更
+mtime(<script>) ≤ updated_at(Case)  → 该文件是上轮执行的产物本身 → 不计入变更
+```
+
+> 依据：Case 的 `last_run_id` 所记录的那次执行**就是**生成该脚本的执行，
+> 把它算成"自那次执行以来的变化"在事实上是错的。
+
+### 9.3 监视路径（由已有字段推导，不新增字段）
+
+| 路径 | 推导方式 |
+|------|---------|
+| 脚本 | Frontmatter `script`（相对 `<frontend>`），逐 Case 精确路径 |
+| 前端页面 | 绑定 `sourceLocate.vueGlobRel` 以 `module` 展开（如 `src/views/**/<module>/**/*.vue`） |
+| 后端 | 在 `<backend>` 的 diff 结果中**按 `module` / `route` 末段做文件名包含过滤**（纯字符串过滤，不读文件内容） |
+
+### 9.4 三档判定（唯一分档，不得新增档位）
+
+| 档 | 判定条件 | 动作 |
+|----|---------|------|
+| **NO CHANGE** | 监视路径无提交变更、无未提交变更，且 `script` 文件存在、`route` 仍可解析到文件 | **REUSE** → 跳过 Step3 / Step4 / Step5，`completed`/`failed` → `running`，直接进 Step7 执行 |
+| **IMPACTED** | 仅部分监视路径变化，且可经 `script` 字段映射回**具体 Case** | **PARTIAL RE-ANALYSIS** → 只对受影响的 Case / Script 做局部重分析与更新；未受影响的 Case 仍走 REUSE |
+| **MAJOR STRUCTURAL** | `route` 已解析不到任何文件 / `script` 文件缺失 / 路由注册文件变化 / 该模块 **过半** Case 被影响 / git 不可用 | **FULL ANALYSIS** → 回到常规 Step3 全量分析（**唯一允许全量的路径**） |
+
+**禁止**：任何微小文件变化直接触发 `MAJOR STRUCTURAL`；也禁止"存在 Case → 永远复用"的 Blind Reuse。
+
+### 9.5 复用时的强制约束
+
+- **不新建 Case**：REUSE 与 PARTIAL 分支下，未受影响的 Case 一律不重建、不重排 ID。
+- **正文零改动**：复用只允许回写 §五 规定的 4 个字段（`status` / `updated_at` / `last_run_id` /
+  `last_run_status`），正文、测试数据、人工修改一律不动。
+- **不无理由重写脚本**：`script` 指向的文件存在且未被判定 IMPACTED 时，**禁止**重新生成。
+- **覆盖能力不变**：复用的是"已完成的分析与生成工作"，**不是**测试内容。数据组数量、断言、
+  变体矩阵、负向用例、真实渲染探测、串行+隔离执行策略一律不变。
+- 判定结果必须在 Run Report 中记一行：`Reuse Gate: NO CHANGE | IMPACTED(<CaseIDs>) | MAJOR STRUCTURAL`，
+  并写明所依据的变更文件清单（无变更时写 `none`）。
