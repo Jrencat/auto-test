@@ -141,7 +141,7 @@ for (const tc of loadExecutableCases().filter((c) => c.frontmatter.id.startsWith
         await page.fill('#username', g.input.username ?? '');
         await page.fill('#password', g.input.password ?? '');
         await page.click('button[type=submit]');
-        actual = await page.locator('.result, .ant-message').innerText();
+        actual = await page.locator('<MESSAGE_TOAST>').innerText(); // 角色见 templates/selectors/
         expect(actual, `期望：${g.expected}`).toContain(g.expected);
         recordResult({ caseId: tc.frontmatter.id, caseTitle: tc.frontmatter.title, groupId: g.id,
           input: g.input, expected: g.expected, actual, result: 'PASS',

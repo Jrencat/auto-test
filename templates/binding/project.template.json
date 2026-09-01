@@ -5,7 +5,7 @@
     "type": "monorepo",
     "frontendDirName": "frontend",
     "backendDirName": "backend",
-    "frontendStack": "Vue3 + TS + Ant Design Vue + ag-Grid (dev port 3000)",
+    "frontendStack": "<你的前端技术栈，如 React+TS / Vue3+TS / Angular（dev port 3000）>",
     "backendStack": "<你的后端技术栈，如 Spring Cloud / Node / Go>"
   },
   "input": {
@@ -50,6 +50,10 @@
     "envFileRel": "tests/.env.test (从 tests/.env.test.example 复制)",
     "authArtifactRel": "tests/.auth/user.json"
   },
+  "ui": {
+    "selectorProfile": "",
+    "_selectorProfile": "选择器适配器文件名，相对 templates/selectors/（如 antd-vue-aggrid.md）。留空则按 templates/selectors/README.md §四 现场探测并沉淀为新适配器。角色定义见该 README §一。"
+  },
   "sourceLocate": {
     "order": ["View", "Router", "API", "Controller", "Service", "Mapper", "XML/SQL", "Database"],
     "vueGlobRel": "src/views/**/<module>/**/*.vue",
@@ -75,8 +79,12 @@
     "caseIdPattern": "TC-<MODULE>-<NNN>",
     "_note": "用例资产（SSOT）与批次报告目录，相对 <cwd>。见 rules/case-store-rule.md"
   },
+  "_pathBase": "路径基准（见 rules/binding-rule.md §一 路径基准表）：testcaseDir / reportFile / htmlDir / caseStore.* / input.pageDocDirDefault 一律相对 <cwd>（仓库根）；runner.configRel / scriptDir.* / sourceLocate.*Rel / auth.envFileRel 相对 <frontend>。commands.cwdKey 只决定执行测试命令的工作目录，不影响文档产物落盘位置。",
   "testcaseDir": "docs/testcases/<module>/",
   "reportFile": "docs/testcases/<module>/自动化测试执行报告.md",
+  "htmlDir": "docs/testcases/<module>/html/",
+  "moduleDirAlias": {},
+  "_moduleDirAlias": "Case frontmatter 的 module 与既有目录名不一致时登记映射，如 {\"orderModule\":\"订单模块\"}，使 HTML 视图与模块汇总报告落在同一目录。",
   "scriptDir": {
     "api": "tests/api/",
     "e2e": "tests/e2e/",

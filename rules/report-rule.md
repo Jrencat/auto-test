@@ -28,12 +28,40 @@
 - `<caseDir>/TC-*.md` 的 `status` / `updated_at` / `last_run_id` / `last_run_status`
 
 更新（模块汇总视图，兼容保留）：
-- `docs/testcases/<module>/E2E_业务主流程用例.md`
-- `docs/testcases/<module>/API_接口测试用例.md`
-- `docs/testcases/<module>/IMPORT_专项测试用例.md`
-- `docs/testcases/<module>/VARIANT_数据变体矩阵用例.md`（多分支页面时，见 `templates/testcase-variant.md`）
-- `docs/testcases/<module>/自动化测试执行报告.md`（客户交付版最新快照，见 `templates/report.md`；
+- `<cwd>/docs/testcases/<module>/E2E_业务主流程用例.md`
+- `<cwd>/docs/testcases/<module>/API_接口测试用例.md`
+- `<cwd>/docs/testcases/<module>/IMPORT_专项测试用例.md`
+- `<cwd>/docs/testcases/<module>/VARIANT_数据变体矩阵用例.md`（多分支页面时，见 `templates/testcase-variant.md`）
+- `<cwd>/docs/testcases/<module>/自动化测试执行报告.md`（客户交付版最新快照，见 `templates/report.md`；
   该文件是**面向客户的汇总视图**，可覆盖更新，但**必须引用本轮 Run ID**，且不替代批次报告的留存）
+
+> ⚠ **落盘基准（高频踩坑）**：上述路径一律相对 **`<cwd>`（仓库根）**，
+> **不是** `<frontend>`。`commands.cwdKey: "frontend"` 只决定在哪跑测试命令，
+> 不改变文档产物位置——写成 `<frontend>/docs/testcases/…` 属明确错误。
+> 写盘前自查：目标绝对路径以 `<cwd>` 开头，且不含前端目录名。完整对照见 `rules/binding-rule.md §一 路径基准表`。
+
+## 一点五、用例审查 HTML 视图（Step10 本轮必产出）
+
+汇总统计回答"通过了多少"，**开发人员还需要知道"用了哪些参数、执行了哪些步骤"**。
+故每轮除报告外，必须产出可点击的用例审查视图：
+
+```bash
+# 在 <frontend> 下执行（脚本会自动上溯定位 <cwd>，产物写到仓库根）
+node tests/support/genCaseHtml.mjs        # 或 npm run test:cases-html
+```
+
+产出（`<cwd>/docs/testcases/<module>/html/`，目录可由绑定 `htmlDir` 覆盖）：
+
+| 文件 | 内容 |
+|------|------|
+| `index.html` | 模块汇总表：Case ID / 标题 / 类型 / 状态 / **步骤数** / **数据组数** / 最近结果 / 测试脚本，含统计卡与搜索筛选 |
+| `TC-<MODULE>-<NNN>.html` | 单条用例：测试目标 / 前置条件 / **完整测试步骤** / **参数矩阵（数据组 × 字段 × 具体输入 × 数据特征 × 预期）** / 断言 / 本轮执行结果 |
+
+- 数据源是 `<caseDir>` 的 Case 文件（SSOT）与 `<reportDir>/RUN-*.jsonl`，**由脚本渲染，禁止手写 HTML**
+  ——手写会与用例资产脱节，正是本机制要消除的不一致。
+- 证据来源轨（§零 A/B 轨）由脚本自动判定并在页面显式标注；B 轨页面会写明"无逐数据组实际输入"，
+  **不得**事后手工改成 A 轨措辞。
+- 若项目非 Node 技术栈、脚本不适用：在报告中标注"HTML 视图 Not Executed + 原因"，不得静默跳过。
 
 ## 二、报告定位：默认输出「可直接交付客户」的完备报告
 
@@ -51,8 +79,12 @@
 3. **Test Coverage**：按模块/脚本统计用例数·Pass·Fail·Blocked·覆盖率；说明覆盖范围 /
    **未覆盖范围** / 新增测试 / 极端数据策略 / **变体矩阵覆盖率（已覆盖取值 / 总取值）**。
 4. **Detailed Test Results**：不省略任何用例（历史 PASS 用例可仅引用 ID+状态）；每条含
-   ID / 名称 / 模块 / 目的 / 测试数据 / 数据变体 / 极端条件 / 步骤(可简写) / 预期 / 实际 /
+   ID / 名称 / 模块 / 目的 / 测试数据 / 数据变体 / 极端条件 / **测试步骤** / 预期 / 实际 /
    状态 / 响应时间(如适用) / 证据。
+   - **「测试步骤」列不得省略、不得写"见用例"**：至少给出编号化的关键动作简写
+     （如 `1 进入列表 → 2 填 D001 → 3 提交 → 4 断言提示`），使评审者不打开用例文件即可知道测了什么。
+   - 本节开头必须放 **§4.0 用例明细索引**，链接 §一点五 生成的 `html/index.html` 与各用例单页，
+     供开发人员查看完整步骤与参数矩阵。
 5. **Edge Case & Boundary Analysis**：极端数据表现 / 容错 / Graceful Degradation /
    Robustness / 数据一致性 / 异常恢复 / 输入校验能力。
 6. **Defects & Risk Assessment**：按 Blocker/Critical/Major/Minor 分类；每个缺陷含
@@ -139,6 +171,10 @@ Run ID → Case ID → Case Title → Data Group ID → 实际输入数据 → �
 - [ ] 已回写 PASS/FAIL/BLOCKED/Not Executed（含归因分类）
 - [ ] **变体矩阵每一行都有真实结果或 BLOCKED/Not Executed 说明**（无静默跳过）
 - [ ] 已执行 Teardown
+- [ ] **已生成用例审查 HTML 视图**（`docs/testcases/<module>/html/index.html` + 每条用例单页，见 §一点五）；
+      非 Node 项目则已标 Not Executed + 原因
+- [ ] 报告 Detailed Test Results **每条都有「测试步骤」**（非"见用例"占位），且含 §4.0 用例明细索引
+- [ ] **所有文档产物落在 `<cwd>`（仓库根）**：路径不含 `<frontend>` 目录名（见 §一 落盘基准）
 - [ ] 已生成**客户交付版**测试报告并通过 Self Review
 
 任一未完成：不得输出"任务完成"，只能继续执行或输出 BLOCKED。

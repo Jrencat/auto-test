@@ -361,7 +361,9 @@ Step11 最终 Gate + Self Review
 4. **登录接口/加密**：脚手架里 `support/auth.setup.ts` 与 `support/crypto.ts` 是**示例**，
    按你的后端登录接口与前端加密方式调整（明文登录可直接去掉加密）。
 5. **前端非 Vue/Playwright 技术栈**：Skill 会跳过默认脚手架、改按 `environment-rule` 探测你已有的框架，并在报告说明。
-6. **UI 选择器手册**：`script-rule.md` 里的选择器手册针对 Ant Design Vue + ag-Grid，用别的 UI 库时按需替换。
+6. **UI 选择器**：`script-rule.md` 已 UI 库无关，只引用语义角色（`TABLE_ROOT` / `COMBO_INPUT` …）。
+   角色→选择器映射在 `templates/selectors/` 下按库分文件，用绑定 `ui.selectorProfile` 选用；
+   没有现成适配器时按 `templates/selectors/README.md §四` 现场探测并沉淀成新文件。
 
 > 所有默认值都集中在 `templates/binding/project.template.json`，规则正文只按字段引用，方便整体替换而不散落硬编码。
 

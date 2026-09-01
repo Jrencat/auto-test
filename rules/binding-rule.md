@@ -16,6 +16,25 @@
 - `project.json`：相对结构与领域默认（前后端目录名、端口、DB 工具、断言字段、命令等），**不含绝对路径**。
 - `runtime.local.json`：仅存**本机绝对路径 + 分支**，随机器/分支变化，故 gitignore。
 
+### 路径基准表（强制，每个相对路径都必须按此解析）
+
+`project.json` 里的相对路径**分属两个不同基准**，混用会把文档产物写进前端项目：
+
+| 配置字段 | 基准 | 解析示例 |
+|---------|------|---------|
+| `caseStore.casesDir` / `caseStore.reportsDir` | **`<cwd>`（仓库根）** | `<cwd>/.auto-test/cases/` |
+| `testcaseDir` / `reportFile` / `htmlDir` | **`<cwd>`（仓库根）** | `<cwd>/docs/testcases/<module>/` |
+| `input.pageDocDirDefault` | **`<cwd>`（仓库根）** | `<cwd>/docs/test-pages/` |
+| `runner.configRel` | `<frontend>` | `<frontend>/playwright.config.ts` |
+| `scriptDir.api` / `.e2e` / `.support` | `<frontend>` | `<frontend>/tests/e2e/` |
+| `sourceLocate.vueGlobRel` / `apiGlobRel` | `<frontend>` | `<frontend>/src/views/**` |
+| `auth.envFileRel` / `authArtifactRel` | `<frontend>` | `<frontend>/tests/.env.test` |
+
+> ⚠ **`commands.cwdKey` 只决定「在哪个目录执行测试命令」**（如 `npm run test` 需在前端根跑），
+> **绝不改变文档类产物的落盘基准**。把 `testcaseDir` / `reportFile` 解析成 `<frontend>/docs/testcases/…`
+> 是明确的错误——所有用例视图、模块汇总报告、HTML 审查视图一律落在**仓库根 `<cwd>`** 下。
+> Step10 写盘前必须自查：产物绝对路径是否以 `<cwd>` 开头且**不**包含 `<frontend>` 目录名。
+
 ### 测试资产目录（与绑定目录分开，Step0 一并幂等创建）
 
 ```
@@ -72,6 +91,8 @@
 | `tests/support/env.ts` | 缺失则生成（含 `pageDocDir`）；已存在则**仅当缺 `pageDocDir` 字段时**补该字段，不覆盖 |
 | `tests/support/crypto.ts` / `fixtures.ts` / `auth.setup.ts` / `resolveActionNo.ts` | 缺失则生成；已存在不覆盖 |
 | `tests/support/caseStore.ts` | 缺失则生成（Case 资产读写 + Test Data Matrix 解析 + Run 记录）；已存在不覆盖 |
+| `tests/support/genCaseHtml.mjs` | 缺失则生成（用例审查 HTML 生成器，零依赖纯 Node）；已存在不覆盖 |
+| `package.json` 的 `scripts` | **仅当不存在** `test:cases-html` 时追加一行 `"test:cases-html": "node tests/support/genCaseHtml.mjs"`；不重排、不格式化其余内容 |
 | `playwright.config.ts`（前端根） | 缺失则生成；已存在不覆盖 |
 | `tests/.env.test.example` | 缺失则生成；已存在则**仅追加缺失变量**（尤其 `TEST_PAGE_DOC_DIR`），不改已有行 |
 | `tests/.env.test` | **绝不生成/覆盖**（含真实账号）。缺失时提示用户手动创建 |

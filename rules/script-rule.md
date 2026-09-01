@@ -3,7 +3,20 @@
 对应主流程 Step6。运行器：**Playwright**（见 `<frontend>/playwright.config.ts`）。
 
 > 脚本目录来自绑定 `project.json.scriptDir`（相对 `<frontend>`，绝对路径查 runtime.local.json）。
-> 下文取值均为通用示例（选择器手册针对 Ant Design Vue + ag-Grid，按你的 UI 库调整）。
+> 下文取值均为通用示例。
+
+## 零、选择器：只引用语义角色，不写死 UI 库
+
+本规则**不假设任何 UI 组件库**。骨架里出现的 `<APP_ROOT>` / `<TABLE_ROOT>` / `<COMBO_INPUT>` 等
+尖括号标记是 **语义角色占位符**，写脚本时替换成你项目 UI 库对应的真实选择器：
+
+- 角色定义与自行探测流程：`templates/selectors/README.md`
+- 具体映射由**适配器**提供，经绑定 `project.json.ui.selectorProfile` 指定
+  （如 `antd-vue-aggrid.md`）；未配置或无现成适配器时按 README §四 现场探测，
+  并把验证过的结论沉淀成新适配器文件。
+
+> ⚠ 落笔前先核对适配器：多数"元素找不到"是选择器写法问题，不是产品缺陷——
+> 误判会污染缺陷归因（见 `rules/testcase-rule.md §9`）。
 
 ## 一、存放位置与命名
 
@@ -62,35 +75,10 @@ import { test, expect } from '../support/fixtures';
 test('ORDER-E2E-001 打开列表页并校验表格', async ({ gotoRoute, authedPage }) => {
   await gotoRoute('order-module/list');
   await authedPage.waitForLoadState('networkidle');
-  await expect(authedPage.locator('.ag-root')).toBeVisible(); // 表格组件基于 ag-Grid
+  await expect(authedPage.locator('<TABLE_ROOT>')).toBeVisible(); // 角色见 templates/selectors/
   // ⚠ 内容级校验（避免空容器假通过，见 environment-rule §真实渲染探测）：
   expect((await authedPage.locator('body').innerText()).length).toBeGreaterThan(0);
 });
-```
-
-### 🧩 Ant Design Vue / ag-Grid 选择器手册（实测验证，按你的 UI 库调整）
-
-写页面级断言前先核对下列已验证的选择器约定，避免"选择器找不到元素"被误判为功能缺陷：
-
-| 目标元素 | 正确选择器 | 常见错误 |
-|---------|-----------|---------|
-| `a-auto-complete` / `a-select` 的可输入框 | `.ant-select-selection-search-input` | ❌ `input[placeholder="..."]`——该组件 placeholder 渲染在兄弟 `<span class="ant-select-selection-placeholder">`，**不在 input 属性上**，按 placeholder 选必然落空 |
-| 下拉输入（页面通常首个 auto-complete） | `.ant-select-selection-search-input` 的 `.first()` | 同上 |
-| 普通 `a-input` 输入框 | `input[placeholder="精确文案"]`（普通 input 的 placeholder 在属性上，可用） | — |
-| ag-Grid 表头列文本（用于列集合断言） | `.ag-header-cell-text`，`allTextContents()` 后 `join('|')` 聚合比对 | ❌ 依赖具体列序——列序会变，按"包含某列名"断言更稳 |
-| ag-Grid 表体行 | `.ag-row` / `.ag-root` | — |
-| `a-form-item` 表单项标签（判断表单项显隐） | `.ant-form-item-label:has-text("标签文案")` | — |
-
-**触发下拉查询的标准动作序列**（auto-complete 的 `@search` + `@keyup.enter`/`@pressEnter` 双绑定）：
-```ts
-const noInput = authedPage.locator('.ant-select-selection-search-input').first();
-await expect(noInput, '下拉输入框未渲染').toBeVisible({ timeout: 10000 });
-await noInput.click();
-await noInput.fill(bizNo);
-await authedPage.waitForTimeout(400); // 等 @search 建立候选
-await noInput.press('Enter');         // 触发查询
-await authedPage.waitForLoadState('networkidle');
-await authedPage.waitForTimeout(500);
 ```
 
 ### 🔗 Case 数据组驱动骨架（强制：测试数据必须真正驱动 Playwright）
@@ -116,7 +104,7 @@ for (const tc of loadExecutableCases().filter((c) => c.frontmatter.module === '<
           await authedPage.fill(`[data-test="${field}"], input[name="${field}"]`, value);
         }
         await authedPage.click('button[type=submit]');
-        actual = (await authedPage.locator('.ant-message, .ant-form-item-explain').first().innerText()).trim();
+        actual = (await authedPage.locator('<MESSAGE_TOAST>, <FORM_ERROR>').first().innerText()).trim();
         expect(actual, `数据组 ${g.id} 期望：${g.expected}`).toContain(g.expected);
         recordResult({ caseId: String(tc.frontmatter.id), caseTitle: String(tc.frontmatter.title), groupId: g.id,
           input: g.input, expected: g.expected, actual, result: 'PASS', durationMs: Date.now() - t0, specFile: __filename });
@@ -163,19 +151,19 @@ for (const v of variants) {
     await gotoRoute('order-module/<page>');
     await authedPage.waitForLoadState('networkidle');
 
-    // —— 标准下拉查询动作序列（见上）——
-    const noInput = authedPage.locator('.ant-select-selection-search-input').first();
+    // —— 触发查询：按适配器的动作序列（组件库可能要求 click → fill → 等候选 → Enter）——
+    const noInput = authedPage.locator('<COMBO_INPUT>').first();
     await expect(noInput, '下拉输入框未渲染').toBeVisible({ timeout: 10000 });
     await noInput.click(); await noInput.fill(v.bizNo);
     await authedPage.waitForTimeout(400); await noInput.press('Enter');
     await authedPage.waitForLoadState('networkidle'); await authedPage.waitForTimeout(500);
 
     // 未白屏/未崩溃
-    await expect(authedPage.locator('#app')).toBeVisible();
+    await expect(authedPage.locator('<APP_ROOT>')).toBeVisible();
     await expect(authedPage.locator('text=系统异常')).toHaveCount(0);
 
-    // 列集合断言（聚合比对，稳）
-    const headers = (await authedPage.locator('.ag-header-cell-text').allTextContents()).join('|');
+    // 列集合断言（聚合比对，稳；不依赖列序）
+    const headers = (await authedPage.locator('<TABLE_HEADER_CELL>').allTextContents()).join('|');
     for (const col of v.expectColumns) {
       expect(headers, `期望列"${col}"未出现，实际表头=${headers}`).toContain(col);
     }
