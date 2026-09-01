@@ -13,6 +13,70 @@
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-09-01
+
+用例审查视图与文档产物落盘基准修复。解决两个来自实际评审的反馈：
+① 报告只给汇总统计，看不到每条用例**用了哪些参数、执行了哪些步骤**；
+② 客户交付版报告被写进了前端项目目录，而非仓库根 `docs/testcases/`。
+
+### 新增 — 用例审查 HTML 视图（`genCaseHtml.mjs`）
+
+- 新增 `templates/scaffold/support/genCaseHtml.mjs`：**零依赖纯 Node ESM** 生成器，
+  由用例资产 `.auto-test/cases/TC-*.md`（SSOT）+ `.auto-test/reports/RUN-*.jsonl`
+  渲染出 `<cwd>/docs/testcases/<module>/html/`：
+  - `index.html`：模块汇总表（Case ID / 标题 / 类型 / 状态 / **步骤数** / **数据组数** /
+    最近结果 / 测试脚本）+ 统计卡 + 前端搜索与结果筛选。
+  - `TC-<MODULE>-<NNN>.html`：单条用例的测试目标 / 前置条件 / **完整测试步骤** /
+    **参数矩阵（数据组 × 字段 × 具体输入 × 数据类型 × 数据特征 × 预期）** / 断言 / 本轮执行结果。
+- **不要求项目已安装 `caseStore.ts`**：脚本自带 Frontmatter / 章节 / Test Data Matrix 解析
+  （列语义识别与 `caseStore.ts` 的 `parseDataMatrix` 对齐），B 轨项目同样可用。
+- 自动判定证据来源轨并在页面显式标注：A 轨读 `RUN-*.jsonl` 逐数据组实录；
+  B 轨（无 jsonl）回退 Frontmatter `last_run_*`，页面写明"无逐数据组实际输入"，
+  **不得**手工改写成 A 轨措辞（对齐 `rules/report-rule.md §零`）。
+- 输出目录从脚本位置**上溯定位 `.auto-test/`** 求得仓库根，故从前端目录调用也能正确落盘。
+- 支持 `--module` / `--run` / `--out` / `--cases` / `--quiet`。
+- `rules/report-rule.md` 新增 **§一点五**：该视图为每轮**必产出**；禁止手写 HTML
+  （手写会与用例资产脱节）；非 Node 项目须标 Not Executed + 原因。
+
+### 修复 — 文档产物落盘基准歧义（报告被写进前端项目）
+
+- 根因：`project.json` 的 `testcaseDir` / `reportFile` 是相对路径却未声明基准，
+  而同文件 `commands.cwdKey: "frontend"` 把执行方引向了前端项目根。
+- `rules/binding-rule.md §一` 新增 **路径基准表**，逐字段明确 `<cwd>`（仓库根）与 `<frontend>` 两类基准，
+  并强调 **`commands.cwdKey` 只决定执行测试命令的目录，不改变文档产物落盘位置**。
+- `configs/project.schema.md` 新增「路径基准（易错点）」小节；
+  `rules/report-rule.md §一` 输出清单路径统一加 `<cwd>/` 前缀 + ⚠ 落盘自查项。
+- 新增绑定字段 `htmlDir`（默认 `docs/testcases/<module>/html/`）与 `moduleDirAlias`
+  （Case 的 `module` 与既有目录名不一致时登记映射，使 HTML 视图与模块报告同目录）。
+
+### 变更 — 报告必须呈现测试步骤
+
+- `templates/report.md` §四表格新增「**测试步骤（简写）**」列，并新增
+  **§4.0 用例明细索引**（链接 `html/index.html` 与各用例单页）；§九 输出清单加 HTML 产物。
+- `rules/report-rule.md` §二第 4 条：「测试步骤」列**不得省略、不得写"见用例"**，
+  至少给出编号化关键动作简写。
+- Final Gate 与 Self Review 各新增 3 条勾选：HTML 视图已生成 / 每条用例有测试步骤 /
+  所有文档产物落在仓库根（路径不含前端目录名）。
+
+### 变更 — 选择器手册降级为可插拔适配器（引擎去 UI 库耦合）
+
+- `rules/script-rule.md` 原内嵌 **Ant Design Vue + ag-Grid 选择器手册**，使引擎隐含特定 UI 库假设。
+  现拆分为：
+  - 主规则新增 **§零**：只引用**语义角色**（`APP_ROOT` / `TABLE_ROOT` / `TABLE_HEADER_CELL` /
+    `TABLE_ROW` / `COMBO_INPUT` / `PLAIN_INPUT` / `FORM_ITEM_LABEL` / `MESSAGE_TOAST` / `FORM_ERROR`），
+    所有骨架里的选择器改为 `<角色>` 占位符。
+  - 新增 `templates/selectors/README.md`：角色定义表、适配器索引、**没有现成适配器时的自行探测流程**、
+    编写适配器的强制要求（每行必须实测、必须写「常见错误」列）。
+  - 新增 `templates/selectors/antd-vue-aggrid.md`：原手册内容迁入，含下拉查询动作序列与列集合断言。
+- 新增绑定字段 `ui.selectorProfile` 选用适配器；留空则现场探测并沉淀为新适配器文件。
+- `architecture.frontendStack` 的示例值改为占位符，不再预设具体前端栈。
+- 换 UI 库 = 换一个适配器文件，主规则一行不动。
+
+### 变更 — 脚手架
+
+- `rules/binding-rule.md §四` 幂等生成 `tests/support/genCaseHtml.mjs`（已存在不覆盖），
+  并**仅当缺失时**向 `package.json` 追加 `"test:cases-html"` 一行（不重排、不格式化其余内容）。
+
 ## [1.0.2] - 2026-08-31
 
 Repeat Run 与执行统计成本优化。**未新建 Skill、未新增文件、未改测试用例格式、未改覆盖策略与测试语义**；
@@ -179,7 +243,8 @@ Repeat Run 与执行统计成本优化。**未新建 Skill、未新增文件、�
 
 - `README.md` / `USAGE.md` / `configs/project.schema.md` / `LICENSE`（MIT）/ `.gitignore`。
 
-[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/Jrencat/auto-test/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/Jrencat/auto-test/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/Jrencat/auto-test/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Jrencat/auto-test/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Jrencat/auto-test/releases/tag/v1.0.0

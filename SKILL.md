@@ -1,6 +1,6 @@
 ---
 name: auto-test
-version: 1.0.2
+version: 1.0.3
 description: 企业级自动化测试闭环编排（可移植全局引擎）。当用户涉及自动化测试、测试用例、API 测试、E2E/UI 自动化、回归测试、测试报告、自动化测试修复，或提供页面集合/接口/流程/需求文档（如 docs/test-pages/**/页面.md）时使用。基于 Playwright（E2E+API）与数据库断言（项目自带的 DB 查询工具），完成"依赖预检→项目绑定解析→源码分析→维护 TestCase→维护脚本→真实执行→日志与数据库断言→回写状态→生成报告"的完整闭环。引擎本体零硬编码路径，项目信息从当前工作目录的绑定配置解析；默认追求"覆盖所有位置"的完备测试（主动识别多分支变体页面并全取值覆盖 + 每条输入做数据变体 + 充分性/中间态精确断言）并输出可直接交付客户的完备报告，无需用户逐次提示。
 ---
 
@@ -51,7 +51,12 @@ description: 企业级自动化测试闭环编排（可移植全局引擎）。�
 - 增量维护的模块汇总视图：`docs/testcases/<module>/`（含多分支页面的 `VARIANT_数据变体矩阵用例.md`）
 - 增量维护的自动化脚本：`<frontend>/tests/{api,e2e}/`（含参数化变体矩阵脚本；`<frontend>` 来自绑定）
 - 每次执行独立的批次报告：`<cwd>/.auto-test/reports/RUN-YYYYMMDD-HHMMSS.md`（+ 同名 `.jsonl` 机器记录）
-- 真实执行的**客户交付版**测试报告：`docs/testcases/<module>/自动化测试执行报告.md`
+- 真实执行的**客户交付版**测试报告：`<cwd>/docs/testcases/<module>/自动化测试执行报告.md`
+- **用例审查 HTML 视图**：`<cwd>/docs/testcases/<module>/html/`（`index.html` 汇总 + 每条用例单页，
+  含完整**测试步骤**与**参数矩阵**，由 `tests/support/genCaseHtml.mjs` 从用例资产渲染，供开发人员审查）
+
+> ⚠ 上述 `docs/` 类产物一律落在 **`<cwd>`（仓库根）**，不是前端项目内。
+> `commands.cwdKey` 只决定执行测试命令的目录——见 `rules/binding-rule.md §一 路径基准表`。
 
 **默认覆盖姿态（无需用户逐次提示）**
 - 主动识别"同一页面因隐藏判别字段渲染不同内容"的多分支页面，枚举判别字段全部取值、构建变体矩阵、
@@ -110,7 +115,9 @@ pending_review --人工审核--> ready --开始执行--> running --> completed /
 | `rules/environment-rule.md` | 环境探测、真实渲染探测、并发安全、安全边界、数据隔离与环境恢复 |
 | `rules/source-analysis-rule.md` | 源码定位顺序与三层断言（前端/API/数据库）+ 变体维度识别/矩阵 + 动态取号 |
 | `rules/testcase-rule.md` | TestCase 增量维护规范（含数据变体清单 + 通用断言模式库引用） |
-| `rules/script-rule.md` | 自动化脚本增量维护规范（选择器手册 + 参数化变体矩阵骨架） |
+| `rules/script-rule.md` | 自动化脚本增量维护规范（**UI 库无关**：只引用语义角色 + 参数化变体矩阵骨架） |
+| `templates/selectors/README.md` | **选择器适配器索引**：语义角色表（`TABLE_ROOT`/`COMBO_INPUT`…）与自行探测流程 |
+| `templates/selectors/<库名>.md` | 各 UI 库的角色→选择器映射（可插拔，经 `ui.selectorProfile` 选用） |
 | `rules/execute-rule.md` | 执行、重试、失败归因、证据收集 |
 | `rules/report-rule.md` | 客户交付版报告结构、归因分类、执行证据、Token 控制、最终 Gate、Self Review |
 | `templates/case.md` | **单条 Case 资产模板**（Frontmatter + Test Data Matrix），落到 `.auto-test/cases/` |
@@ -123,6 +130,7 @@ pending_review --人工审核--> ready --开始执行--> running --> completed /
 | `templates/binding/runtime.local.template.json` | 每机器运行时模板（前后端绝对路径 + 分支） |
 | `templates/scaffold/` | 前端测试脚手架（support/*、playwright.config.ts、.env.test.example、README） |
 | `templates/scaffold/support/caseStore.ts` | **Case 资产读写运行时**：Frontmatter 解析/最小化回写、Test Data Matrix 解析、Run 记录（也可 `node` 直接当 CLI 用） |
+| `templates/scaffold/support/genCaseHtml.mjs` | **用例审查 HTML 生成器**：由 Case 资产 + RUN-*.jsonl 渲染 `docs/testcases/<module>/html/`（步骤 + 参数矩阵），零依赖纯 Node |
 | `configs/project.schema.md` | 绑定配置字段说明（真实实例由首次运行生成到 `<cwd>/.claude/auto-test/`） |
 
 ## 项目规范优先
