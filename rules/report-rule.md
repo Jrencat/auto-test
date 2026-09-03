@@ -158,6 +158,8 @@ Run ID → Case ID → Case Title → Data Group ID → 实际输入数据 → �
 - [ ] FLAKY 条目已单独列出（不并入稳定 PASS）
 - [ ] 每个 FAIL 均已过 `rules/execute-rule.md §二` 的 TRIAGE 与 Evidence Gate；
       证据不足者标 `UNKNOWN` + 下一步所需证据，未编造根因
+- [ ] 〔v1.1.0〕有 FAIL/ERROR 时已产出 `.auto-test/diagnostics/DIAG-<RunId>.json`（+ `.md`），
+      每条含 `triage` / `evidence[]` / `recoveryEntry`（`rules/execute-rule.md §2.7`）
 - [ ] 诊断探针已清理（`tests/**/_diag-*.ignore.ts` 无残留）
 - [ ] FAIL（Assertion Failure）与 ERROR（Automation Error）已分开统计与呈现
 - [ ] Case Status 与 Execution Result 未混用；无"业务断言失败被写成 failed"的情况

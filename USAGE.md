@@ -17,7 +17,8 @@
 - [快速上手](#快速上手)
 - [架构：全局引擎 + 两层项目配置](#架构全局引擎--两层项目配置)
 - [配置参考](#配置参考)
-- [工作流程（闭环 12 步）](#工作流程闭环-12-步)
+- [工作流程（闭环 12 步 → v1.1.0 由 Agent 承担）](#工作流程闭环-12-步--v110-由-agent-承担)
+- [v1.1.0：Multi-Agent 架构](#v110multi-agent-架构)
 - [覆盖策略：默认追求完备](#覆盖策略默认追求完备)
 - [通用断言模式库](#通用断言模式库)
 - [适配到你的项目](#适配到你的项目)
@@ -288,36 +289,148 @@ TEST_PAGE_DOC_DIR=docs/test-pages/
 
 ---
 
-## 工作流程（闭环 12 步）
+## 工作流程（闭环 12 步 → v1.1.0 由 Agent 承担）
 
-Skill 默认**连续执行**整条闭环，仅在缺依赖/输入/环境/权限或用户终止时暂停（BLOCKED）：
+Skill 默认**连续执行**整条闭环，仅在缺依赖/输入/环境/权限或用户终止时暂停（BLOCKED）。
+**v1.1.0 起 Step 不变，但执行者从"Orchestrator 自己"变成"调度对应 Sub-Agent"**：
 
 ```
-Step-1 依赖预检          缺 Playwright/Chromium/服务 → 给安装命令
-Step0  项目绑定解析       探测/交互前后端路径 + 刷新分支 + 生成前端脚手架 + 创建 .auto-test/
-Step0.1 执行模式解析      --mode / 自然语言 / 默认配置 / 询问一次
-Step0.2 扫描用例资产      读 .auto-test/cases/ 的 status，决定「生成」还是「恢复执行」
-Step0.5 解析测试页面来源   命令带路径直接用；未带 → 交互二选一（手输多路径 / 用 TEST_PAGE_DOC_DIR 目录）
-Step1  输入完整性检查
-Step2  环境探测 + 真实渲染探测 + 并发安全
-Step3  源码分析：三层断言 + 变体维度识别/矩阵 + 动态取号
-Step4  读取历史 Case + 去重判定（禁止重复生成同一场景）
-Step5  生成/维护 Case（具体测试数据矩阵 + 变体矩阵 + 数据变体 + 断言模式库）
-Step5.5 🛑 HITL 挂起点     Human-in-the-Loop：写盘 pending_review + 输出审核指引 → 退出
-Step6  增量维护脚本（数据组驱动参数化 + 变体矩阵）
-Step7  真实执行（串行 + 隔离；ready → running）
-Step8  收集日志/截图/数据库断言 + 逐数据组写执行记录
-Step9  回写 Case 状态（running → completed/failed，最小化改写）
-Step10 生成批次 Run Report + 客户交付版报告
-Step11 最终 Gate + Self Review
+Step-1 依赖预检           ▸ preflight-binding    缺 Playwright/Chromium/服务 → 给安装命令
+Step0  项目绑定解析        ▸ preflight-binding    探测前后端路径 + 刷新分支 + 脚手架 + 建 .auto-test/
+Step0.1 执行模式解析       · Orchestrator         --mode / 自然语言 / 默认配置 / 询问一次
+Step0.2 扫描用例资产       · Orchestrator         只读 Frontmatter 的 status，决定路由
+Step0.3 Repeat Run 复用    · Orchestrator         Cheap Reuse Gate（NO CHANGE / IMPACTED / MAJOR）
+Step0.5 解析测试页面来源    · Orchestrator         命令带路径直接用；未带 → 交互二选一
+Step1  输入完整性检查      · Orchestrator
+Step2  环境 + 真实渲染探测  ▸ preflight-binding / executor-reporter
+Step3  源码分析            ▸ source-analyst       三层断言 + 变体矩阵 + 动态取号 → analysis/*
+Step4  历史 Case 去重       ▸ case-designer
+Step5  生成/维护 Case       ▸ case-designer        测试数据矩阵 + 变体矩阵 + 数据变体 + 断言模式库
+Step5.5 🛑 HITL 挂起点      ▸ case-designer 返回 WAITING_FOR_HUMAN → Orchestrator 真正停止
+Step6  增量维护脚本        ▸ script-engineer      数据组驱动 + 变体矩阵 + **Case↔Script 一致性检查**
+Step7  真实执行            ▸ executor-reporter    串行 + 隔离；ready → running
+Step8  证据收集            ▸ executor-reporter    日志/截图/Trace/DB 断言 + 逐数据组写记录
+Step8.5 FAIL 诊断落盘      ▸ executor-reporter    TRIAGE + 证据 + 假设 + recoveryEntry → diagnostics/
+Step9  回写 Case 状态       ▸ executor-reporter    running → completed/failed，最小化改写
+Step10 生成报告            ▸ executor-reporter    批次 Run Report + 客户交付版 + HTML 视图
+Step11 Final Gate          · Orchestrator         逐项验收 + Self Review + 最终 Summary
 ```
+
+`▸` = 调度 Sub-Agent（独立上下文）；`·` = Orchestrator 自身的调度决策。
 
 **产物**：
 - 用例资产（SSOT）：`<cwd>/.auto-test/cases/TC-*.md`
+- 〔v1.1.0〕源码分析：`<cwd>/.auto-test/analysis/AN-*.md` + `variants/api-map/assertion-map/data-dependencies.json`
+- 〔v1.1.0〕编排状态：`<cwd>/.auto-test/state/pipeline.json` + `state/contracts/*.json`
+- 〔v1.1.0〕FAIL 诊断：`<cwd>/.auto-test/diagnostics/DIAG-<RunId>.json` / `.md`
 - 批次报告：`<cwd>/.auto-test/reports/RUN-YYYYMMDD-HHMMSS.md`（+ 同名 `.jsonl` 机器记录）
 - 模块汇总视图：`docs/testcases/<module>/`（含多分支页面的变体矩阵用例）
 - 脚本：`<frontend>/tests/{api,e2e}/`
 - 报告：`docs/testcases/<module>/自动化测试执行报告.md`（客户交付版最新快照）
+
+---
+
+## v1.1.0：Multi-Agent 架构
+
+### Agent 分工
+
+| Agent | 负责 | 严禁 | 落盘 Artifact |
+|-------|------|------|--------------|
+| **Orchestrator**（主会话） | 调度 / 状态 / Resume / HITL / Retry / Final Gate | 分析源码、设计用例、写脚本、执行测试、归因根因 | `state/pipeline.json`、`state/contracts/*` |
+| `preflight-binding` | 预检 / 绑定探测 / 幂等脚手架 | 分析源码、设计用例、写脚本、执行 | `runtime.local.json`、`<frontend>/tests/**` |
+| `source-analyst` | 源码链路 / 变体矩阵 / 三层断言 / 动态标识 | 建用例、写脚本、执行、改业务源码 | `analysis/*` |
+| `case-designer` | 去重 / 增量 Case / Test Data Matrix / HITL | 写脚本、执行、把 `pending_review` 改 `ready` | `cases/TC-*.md`、`docs/testcases/<module>/` |
+| `script-engineer` | Case→Script / 数据与变体驱动 / 一致性检查 | 执行测试、改 Case 正文、改业务源码 | `<frontend>/tests/{api,e2e}/*.spec.ts` |
+| `executor-reporter` | 真实执行 / 证据 / 诊断 / 状态回写 / 报告 | 设计新 Case、结构性重写脚本、执行 `pending_review` | `reports/*`、`diagnostics/*`、客户报告、HTML |
+
+### 调度机制（Dispatch Tier）
+
+Claude Code 只从 `.claude/agents/` 与 plugin `agents/` 加载 Agent 定义，**不加载 Skill 目录下的
+`agents/`**。因此提供两档，**运行时自动判定**：
+
+| Tier | 条件 | 调度方式 |
+|------|------|---------|
+| **A** | 已安装并重启会话 | `Agent(subagent_type: "auto-test-<name>", ...)` |
+| **B**（默认） | 未安装，解压即用 | `Agent(subagent_type: "general-purpose", prompt: "读取 <skillDir>/agents/<name>.md 并严格遵守…")` |
+
+**两档都是真实的 Agent 工具调度**：Sub-Agent 在独立上下文窗口执行、独立持有工具结果、
+只回传结构化契约。差异仅在于角色定义是"已注册"还是"运行时加载"。
+
+启用 Tier A（可选）：
+
+```bash
+node <skillDir>/scripts/install-agents.mjs --check   # 预览
+node <skillDir>/scripts/install-agents.mjs           # 装到 ~/.claude/agents/
+node <skillDir>/scripts/install-agents.mjs --project # 或装到 <cwd>/.claude/agents/
+node <skillDir>/scripts/install-agents.mjs --uninstall
+```
+
+幂等：内容一致跳过；非本 Skill 安装的同名文件**不覆盖**，报 `conflict`。
+
+### Pipeline State（与 Case Status 正交）
+
+```
+INIT → PREFLIGHT_READY → ANALYSIS_READY → CASE_READY → SCRIPT_READY
+     → EXECUTING → REPORT_READY → FINALIZED
+异常/挂起：BLOCKED | WAITING_FOR_HUMAN | RECOVERABLE | FAILED
+```
+
+落盘 `<cwd>/.auto-test/state/pipeline.json`。它只表示"本次编排走到哪一步"，
+**不是第二套业务状态机**；与磁盘上的 Case 冲突时**永远以 Case 文件为准**。
+
+### Artifact 流
+
+```
+preflight-binding → runtime.local.json / <frontend>/tests/
+        ↓
+source-analyst    → .auto-test/analysis/*
+        ↓
+case-designer     → .auto-test/cases/TC-*.md
+        ↓
+script-engineer   → <frontend>/tests/{api,e2e}/*.spec.ts
+        ↓
+executor-reporter → .auto-test/reports/RUN-* + .auto-test/diagnostics/DIAG-* + docs/testcases/<module>/
+```
+
+Agent 之间**只传路径 + 摘要**，不传完整正文；Orchestrator 校验每个回执的 `outputs`
+路径真实存在，谎报产物判 `FAILED`。
+
+### Resume（中断恢复）
+
+任何阶段中断后重新运行 `/auto-test`，**只依据磁盘**恢复，禁止依赖对话记忆：
+
+| 磁盘现象 | 恢复动作 |
+|---------|---------|
+| `cases/` 有 `pending_review` | 展示审核清单 → `WAITING_FOR_HUMAN` → 停止 |
+| `cases/` 有 `ready` | 跳过分析与生成 → **先过 `script-engineer` 一致性检查** → 执行 |
+| 全为 `completed`/`failed` | Cheap Reuse Gate → NO CHANGE 则直接重跑 |
+| `analysis/AN-<M>.md` 已存在 | 跳过该 module 的 source-analyst |
+| `pipeline.json` 缺失或矛盾 | 视为 `INIT`，依据磁盘 Artifact 重建 |
+
+### Failure Recovery
+
+执行阶段 FAIL 时（**业务断言失败不是 Agent 失败**）：
+
+```
+FAIL → 证据完整落盘 → TRIAGE 八分类（execute-rule §2.1）→ Evidence Gate
+     → 假设 + 证伪条件（仅 TEST_BUG / PRODUCT_BUG / SPECIFICATION_ERROR）
+     → diagnostics/DIAG-<RunId>.json（含 recoveryEntry）→ Pipeline State = RECOVERABLE
+```
+
+`recoveryEntry` 指明**下次该调度哪个 Agent、做什么、用什么命令复现**，例如：
+
+```json
+{ "agent": "script-engineer", "action": "修正 COMBO_INPUT 等待口径",
+  "command": "npx playwright test tests/e2e/device-log.e2e.spec.ts -g \"表单默认值\"" }
+```
+
+> 这是**可持久化的诊断与恢复入口**，不是自动 Debug 系统。本版本不自动修改业务源码、
+> 不做多轮自主修复、不做无限 Retry。
+
+### Retry 边界
+
+每 Agent 每轮触发预算 **1 次**（计数写 `pipeline.json.retries`）；
+`BLOCKED` 回执**不重试**（外部条件缺失）；超预算转 `BLOCKED` 并停止。
 
 ---
 
@@ -388,13 +501,24 @@ Skill 内置硬性约束（`rules/environment-rule.md`）：
 
 ```
 auto-test/
-├── SKILL.md                     # Skill 入口（触发条件 / 输入输出 / 导航）
+├── SKILL.md                     # Skill 入口（触发条件 / 架构 / 输入输出 / 导航）
 ├── README.md                    # 内部说明
 ├── USAGE.md                     # 本文档（面向使用者）
+├── agents/                      # 【v1.1.0】Agent 角色契约（Role/职责/边界/Allowed Rules/Contract）
+│   ├── orchestrator.md          # 总指挥（含越权禁令；默认不注册为 Sub-Agent）
+│   ├── preflight-binding.md     # 预检 + 绑定 + 幂等脚手架
+│   ├── source-analyst.md        # 源码链路 + 变体矩阵 + 三层断言 → analysis/*
+│   ├── case-designer.md         # 去重/增量 Case + Test Data Matrix + HITL
+│   ├── script-engineer.md       # Case→Script + 一致性检查
+│   └── executor-reporter.md     # 真实执行 + 证据 + 诊断 + 报告
+├── scripts/                     # 【v1.1.0】引擎工具（零依赖 Node ESM）
+│   ├── install-agents.mjs       # 幂等注册 Agent 到 .claude/agents/（启用 Tier A）
+│   └── validate-structure.mjs   # 结构自检：frontmatter/章节/引用/硬编码路径/JSON
 ├── prompts/
-│   └── orchestrator.md          # 编排：预检 + 绑定 + 意图分析 + 调度
-├── rules/                       # 执行规范（模块化）
-│   ├── auto-test-agent.md       # 主入口/索引
+│   └── orchestrator.md          # 调度 Prompt：Tier 判定 + 状态校正 + 契约 + 回执路由 + Gate
+├── rules/                       # 执行规范（模块化，按 Agent 分片加载）
+│   ├── auto-test-agent.md       # 【v1.1.0】Orchestrator 主规范：架构/Dispatch Table/Gate
+│   ├── pipeline-state-rule.md   # 【v1.1.0】Pipeline State / Agent Contract / Artifact / Retry / Tier
 │   ├── preflight-rule.md        # 依赖预检
 │   ├── binding-rule.md          # 项目绑定 + 运行时路径/分支 + 脚手架生成
 │   ├── mode-rule.md             # 执行模式（Full-Auto / Human-in-the-Loop）与真正暂停

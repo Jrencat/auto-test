@@ -41,9 +41,14 @@
 <cwd>/.auto-test/
 ├── cases/        # 测试用例资产（SSOT），建议提交入库
 ├── reports/      # 每次执行的独立批次报告 + .jsonl 执行记录
-└── .gitignore    # 默认忽略 reports/*.jsonl
+├── analysis/     # 〔v1.1.0〕Source Analyst 产物（AN-*.md / *.json）
+├── diagnostics/  # 〔v1.1.0〕FAIL 诊断入口（DIAG-<RunId>.json/.md）
+├── state/        # 〔v1.1.0〕编排状态：pipeline.json + contracts/
+│   └── contracts/
+└── .gitignore    # 默认忽略 reports/*.jsonl；v1.1.0 追加建议忽略 state/ 与 diagnostics/
 ```
 
+- 完整布局与用途见 `rules/pipeline-state-rule.md §一`。
 - 路径可被绑定 `project.json.caseStore.casesDir` / `reportsDir` 覆盖。
 - **只创建缺失目录，绝不清空或覆盖已有用例文件**（见 `rules/case-store-rule.md §人工修改保护`）。
 - 若目录位置被自定义，把绝对路径通过 `AUTO_TEST_CASE_DIR` / `AUTO_TEST_REPORT_DIR` 环境变量

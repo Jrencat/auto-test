@@ -13,6 +13,102 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-03
+
+**架构升级：单体 Skill + 集中式 Rules → Orchestrator + Specialized Sub-Agents +
+Persistent State + Artifact Store。**
+
+编排层从"一个 Agent 加载全部 Rules 并从头干到尾"，改为"总指挥调度 5 个专职 Agent，
+各自在独立上下文中只加载自己的 Allowed Rules，通过磁盘 Artifact 通信"。
+**测试能力、覆盖姿态与报告质量不降级**；`/auto-test` 入口与全部既有能力向后兼容。
+
+### Added
+
+- **Orchestrator**
+  - `agents/orchestrator.md`：总指挥角色契约，含**越权禁令**
+    （禁止亲自分析源码 / 设计用例 / 写脚本 / 执行测试 / 归因根因 / 做环境探测）。
+  - `prompts/orchestrator.md` 重写为**真正的调度 Prompt**：Dispatch Tier 判定 → 状态校正 →
+    输入契约构造 → 回执校验 → SUCCESS/BLOCKED/WAITING_FOR_HUMAN/FAILED 路由 → 有界 Retry → Final Gate。
+  - `rules/auto-test-agent.md` 升级为 **Orchestrator 主规范**：新增 Architecture、
+    Agent 职责速查、**Dispatch Table**（Step → 调度哪个 Agent）、Artifact Contract、Recovery、
+    编排类 Final Gate 条目。原有 Step 全部保留，只把执行者从"自己"改为"对应 Agent"。
+
+- **Specialized Agents**（`agents/*.md`，均含 Role / Responsibilities / Non-Responsibilities /
+  Allowed Rules / Input / Output / State Transitions / Artifact Contract / Error Handling / Idempotency）
+  - `preflight-binding.md` —— 环境预检 + 项目绑定探测 + 幂等脚手架
+  - `source-analyst.md` —— Page→Router→API→Controller→Service→Mapper→SQL→DB 链路分析、
+    变体维度识别与矩阵、三层断言点、动态标识解析
+  - `case-designer.md` —— 历史 Case 检索/去重/增量、Variant Matrix、Test Data Matrix、
+    数据变体清单、断言模式库、HITL 挂起
+  - `script-engineer.md` —— Case→Script、数据与变体驱动、语义选择器适配器、
+    **Case↔Script 一致性检查（`ready` Case 也必经）**
+  - `executor-reporter.md` —— 串行隔离真实执行、证据收集、DB 断言、TRIAGE 诊断、
+    最小化状态回写、批次报告 + 客户交付版报告 + HTML 视图
+
+- **Persistent Pipeline State**（`rules/pipeline-state-rule.md`）
+  - `<cwd>/.auto-test/state/pipeline.json`：`INIT → PREFLIGHT_READY → ANALYSIS_READY →
+    CASE_READY → SCRIPT_READY → EXECUTING → REPORT_READY → FINALIZED`
+    + `BLOCKED` / `WAITING_FOR_HUMAN` / `RECOVERABLE` / `FAILED`。
+  - `<cwd>/.auto-test/state/contracts/<SEQ>-<agent>.json`：每次调度的结构化回执存档。
+  - **磁盘是唯一事实来源**：每次触发先用磁盘 Artifact 校正状态，禁止依赖对话记忆。
+
+- **Artifact Store**
+  - 新增 `<cwd>/.auto-test/analysis/`（`AN-<MODULE>.md` + `variants.json` / `api-map.json` /
+    `assertion-map.json` / `data-dependencies.json`）。
+  - 新增 `<cwd>/.auto-test/diagnostics/`（`DIAG-<RunId>.json` / `.md`）。
+  - 既有 `cases/` `reports/` 与 `<frontend>/tests/` 脚本目录**位置不变**。
+
+- **Agent Contract**：统一输入契约（路径 + 元数据 + 摘要）与输出契约
+  （`status` / `state` / `outputs` / `summary` / `metrics` / `errors` / `next`）；
+  Orchestrator **校验 `outputs` 路径真实存在**，谎报产物判 `FAILED`。
+
+- **Resume**：任何阶段中断后重新 `/auto-test`，依据 `state/` + `cases/` + `analysis/` +
+  `reports/` + `diagnostics/` 恢复。
+
+- **工具脚本**
+  - `scripts/install-agents.mjs`：幂等把 Agent 注册到 `.claude/agents/`，启用 Tier A 原生调度；
+    支持 `--check` / `--project` / `--uninstall`，冲突文件不覆盖。
+  - `scripts/validate-structure.mjs`：结构自检（frontmatter / 必需章节 / 交叉引用 /
+    硬编码绝对路径 / JSON 代码块）。
+
+### Improved
+
+- **Context Isolation**：Orchestrator 只读 state / contracts / Case **Frontmatter** /
+  Artifact 存在性，**不再**为"了解情况"读业务源码、完整报告或全部 Case 正文。
+- **Rule Loading**：12 份 rules 由"一个 Agent 全量加载"改为**按 Agent 分片加载**
+  （见 `rules/auto-test-agent.md §子规范索引` 的映射表），单个 Agent 上下文内不再出现无关规则。
+- **Agent 间通信**：只传路径 + summary，不传完整正文（Progressive Disclosure：
+  元数据 → summary → 必要片段 → 完整内容）。
+- **HITL**：`case-designer` 返回 `WAITING_FOR_HUMAN` → Orchestrator 写 `waitingForHuman` 并**真正停止**；
+  下次触发从磁盘 Resume，不依赖上一轮对话。
+- **Failure Handling**：新增 `rules/execute-rule.md §2.7` **诊断落盘**——
+  Evidence + 结构化 Failure Summary + Diagnostic Hypothesis + **`recoveryEntry` 恢复/回归入口**。
+  §2.1~§2.6 既有 TRIAGE 八分类 / Evidence Gate / 假设证伪 / Diagnostic Budget **原样复用未改写**。
+- **Retry 有界**：每 Agent 每轮预算 1 次，计数落盘；`BLOCKED` 回执不重试；超预算转 `BLOCKED`。
+  **禁止无限 Retry。**
+- **`ready` Case 恢复路径修正**：不再直连 Executor，必须先过 `script-engineer` 一致性检查
+  （脚本可能不存在或已过期）；一致时零改动返回 `SCRIPT_READY`。
+
+### Preserved（明确未破坏）
+
+- 三层配置：Global 引擎 / Project `project.json` / Runtime `runtime.local.json`
+- **Zero Hardcoded Paths**（新增 `validate-structure.mjs` 自动校验）
+- Case Store 与 **Case Lifecycle 状态机完全未变**（`pending_review / ready / running /
+  completed / failed`，仍由 `rules/case-store-rule.md §三` 唯一定义）——
+  Pipeline State 与之**正交**，不是第二套业务状态机，冲突时以 Case 文件为准
+- HITL 真正挂起 / Full-Auto 无人干预
+- Variant Matrix / Test Data Matrix / Assertion Pattern / 数据变体清单
+- Playwright（E2E + API）+ 数据库断言 + 真实渲染探测 + 串行隔离执行
+- 客户交付版报告 / 批次报告 / 用例审查 HTML 视图 / Templates / 选择器适配器
+- `/auto-test` 入口与自然语言测试意图触发，参数与行为向后兼容
+
+### Notes
+
+- Claude Code 只从 `.claude/agents/` 与 plugin `agents/` 加载 Agent 定义，**不加载 Skill 目录下的
+  `agents/`**。因此提供两档调度：**Tier A**（已安装，原生 `subagent_type`）与
+  **Tier B**（默认，`general-purpose` 承载角色定义）。两档**都是真实 Agent 工具调度**，
+  Sub-Agent 在独立上下文窗口执行；差异仅在于角色定义是"已注册"还是"运行时加载"。
+
 ## [1.0.3] - 2026-09-01
 
 用例审查视图与文档产物落盘基准修复。解决两个来自实际评审的反馈：

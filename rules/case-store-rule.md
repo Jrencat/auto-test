@@ -17,6 +17,9 @@
     └── RUN-20260810-160200.md
 ```
 
+> 〔v1.1.0〕同级还有 `analysis/`（源码分析产物）、`diagnostics/`（FAIL 诊断）、`state/`（编排状态），
+> 完整布局见 `rules/pipeline-state-rule.md §一`。它们**不影响**本文件定义的 Case 生命周期。
+
 - 目录可在绑定 `project.json.caseStore.casesDir` / `reportsDir` 覆盖，默认即上表
   （引擎不写死具体项目路径；`<cwd>` = 触发 `/auto-test` 的工作目录）。
 - 首次运行时创建缺失目录；**已存在的文件一律不动**。

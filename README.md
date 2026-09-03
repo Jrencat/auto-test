@@ -22,6 +22,13 @@ auto-test 把这些沉淀成**默认行为**：多分支变体矩阵全取值覆
 
 ## 特性
 
+- 🤖 **Multi-Agent 架构**（v1.1.0）：Orchestrator 只负责调度、状态与验收，
+  5 个专职 Sub-Agent（Preflight&Binding / Source Analyst / Case Designer / Script Engineer /
+  Executor&Reporter）**各自在独立上下文中只加载自己的规则**，通过磁盘 Artifact 通信。
+- 💾 **状态持久化 + Resume**（v1.1.0）：Pipeline State 落盘 `.auto-test/state/`，
+  中断后重新触发**只依据磁盘恢复**，不依赖对话记忆。
+- 🔬 **FAIL 诊断闭环**（v1.1.0）：失败时证据 + TRIAGE 分类 + 假设 + **恢复入口**
+  落盘 `.auto-test/diagnostics/DIAG-*.json`，可被下一轮消费。
 - 🔌 **位置无关引擎**：全局安装或项目内均可，解压即用。
 - 🧭 **三层配置**：全局引擎 + 可提交的项目画像 + gitignore 的本机运行时（含**分支自动对准**）。
 - ✅ **依赖预检**：node / Playwright / Chromium / 服务 / DB 工具，缺失只提示不自动装。

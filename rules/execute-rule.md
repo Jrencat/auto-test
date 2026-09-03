@@ -123,6 +123,29 @@
 - 诊断产物（TRIAGE 分类 / 假设与证伪 / 证据 / 根因或 `UNKNOWN` + 下一步）写入本轮批次报告与最终报告；
   Case 文件仍只回写既有 4 个字段（`rules/case-store-rule.md §五`）。
 
+### 2.7 〔v1.1.0〕诊断落盘 —— FAIL Feedback Loop 最小闭环
+
+本轮存在 FAIL / ERROR 时，**必须**把上述诊断结论投影成结构化 Artifact：
+
+```
+<cwd>/.auto-test/diagnostics/DIAG-<RunId>.json   （机器可读，供下次 Resume 消费）
+<cwd>/.auto-test/diagnostics/DIAG-<RunId>.md     （人可读，与批次报告互链）
+```
+
+每条 item 至少含：`caseId` / `dataGroupId` / `result` / `failureType` / `triage`（§2.1 八分类）/
+`evidence[]`（证据文件路径）/ `hypotheses[]`（仅 5/6/7 类，含 `falsifiableBy`）/
+`rootCause`（或 `null`）/ `nextEvidence`（`UNKNOWN` 时必填）/ **`recoveryEntry`**。
+
+`recoveryEntry` 字段结构与完整示例见 `agents/executor-reporter.md §4`：
+
+```
+recoveryEntry: { agent: "script-engineer|case-designer|null", action: "...", command: "npx playwright test <file> -g \"<用例名>\"" }
+```
+
+**定位**：这是"可持久化的诊断与恢复**入口**"，**不是**自动 Debug 系统。
+本版本**不**要求自动修改业务源码、不要求多轮自主修复、不要求无限 Retry；
+§2.1~§2.6 的既有诊断能力**原样复用**，本节只增加"落盘 + 恢复入口"这一层。
+
 ## 三、证据收集（Step8）与 Token 控制
 
 - **逐数据组写执行记录**（强制）：每个 Data Group 执行完立即 `recordResult()` 追加到
