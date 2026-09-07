@@ -43,6 +43,23 @@ auto-test 把这些沉淀成**默认行为**：多分支变体矩阵全取值覆
 - 📄 **报告与用例解耦**：每次执行一份 `.auto-test/reports/RUN-YYYYMMDD-HHMMSS.md`，
   历史报告只增不改；客户交付版报告含 Executive Summary / Coverage / Detailed Results / Edge Case / Defects & Risk / Conclusion。
 
+## Harness Core 与 CLI（2.0 Phase 1）
+
+Agent 决定「怎么测试」，Harness 决定「什么才算真的测试过」。正式 CLI 名称：**`auto-test`**。
+
+```bash
+auto-test case ready TC-X-001     # 新 Case 无 Assertion → 拒绝，退出码 1
+auto-test verify   <runId>        # 0 可信充分 ｜ 1 不充分 ｜ 2 INVALID
+auto-test finalize <runId>        # 0 FINALIZED_PASS ｜ 1 其它终局 ｜ 2 INVALID
+auto-test resume   <runId>        # Run 级恢复，run_id 不变
+```
+
+终局 6 态：`FINALIZED_PASS` / `FINALIZED_FAIL` / `FLAKY` / `BLOCKED` / `INCONCLUSIVE` / `INVALID`。
+Agent 无法绕过 Harness 直接宣布 `FINALIZED_PASS`——谎报、证据篡改、断言未求值
+都会被 `verify` / `finalize` 机械拦下并返回非零退出码。
+
+零依赖示例：`node examples/run-specs.mjs`（三个代表 Spec，分别产出 PASS / FAIL / FLAKY）。
+
 ## 快速上手
 
 ```bash

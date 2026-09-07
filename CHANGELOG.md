@@ -13,6 +13,100 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-07
+
+**Auto-Test 从「Agent 引导式测试 Skill」升级为「Agent-Native Software Testing Harness Foundation」。**
+
+> Agent decides HOW to test. Harness verifies WHAT actually happened.
+
+审计结论（`docs/architecture/`）：v1.x 的工程确定性几乎全部用自然语言表达，
+执行率等于模型自觉率而非 100%（实证：`recordResult()` 在 40+ spec 中 0 调用点）。
+Phase 1 不增加规范，而是把已经写清楚的规范改由代码强制。
+
+### Added —— Harness Core（零依赖 Node ESM）
+
+- `core/constants.mjs`：枚举、Schema 版本、退出码的唯一事实来源。
+- `core/case-store.mjs`：Case 一等实体。兼容 v1.x 的 Markdown + Frontmatter 格式，
+  新增 `## 断言定义` 表（Assertion 一等实体）与 `schema_version`。
+- `core/run-store.mjs`：Run / Attempt / Assertion Result / Execution Event 持久化。
+  事实来源是只追加的 `events.jsonl`，`run.json` 是其投影。
+- `core/evidence-store.mjs`：Evidence 一等实体 + Manifest + SHA256 完整性校验。
+- `core/policy.mjs`：三条最小 Policy（Evidence / Retry / Finalization），
+  形态为「配置 + 纯函数」，**不引入** PolicyEngine / Registry / Resolver / DSL。
+- `core/verify.mjs`：把核对结果分成 violations（不可信）与 gaps（不充分）两类。
+- `core/finalize.mjs`：**唯一有权写 `final_status` 的地方**。
+- `core/index.mjs`：公共 API 门面，CLI / MCP / SDK / Skill 一律经此调用。
+
+### Added —— CLI（正式名称 `auto-test`）
+
+`case` / `run` / `verify` / `finalize` / `resume`。
+退出码即约束：`0` 通过 ｜ `1` 未达成通过条件 ｜ `2` 事实不可信（INVALID） ｜ `3` 用法错误。
+
+### Added —— 终局状态（6 态）
+
+`FINALIZED_PASS` / `FINALIZED_FAIL` / `FLAKY` / `BLOCKED` / `INCONCLUSIVE` / `INVALID`。
+
+### Added —— 结构约束
+
+- **Assertion Gate**：新 Case 无 Assertion 不得 `pending_review(DRAFT) → ready`。
+- **LEGACY_NO_ASSERTION**：历史无断言 Case 可读取 / 执行 / 迁移，但**永远不得** `FINALIZED_PASS`。
+- **Attempt 历史不可覆盖**：`[FAIL, PASS]` 判 `FLAKY` 而非 `PASS`。
+- **Run 不可变**：已 FINALIZED 的 Run 任何写入直接抛错。
+- **Fake PASS 机械检测**：Claim=PASS 但无执行事实事件 → `INVALID`。
+- **Evidence 完整性**：SHA256 不匹配或文件缺失 → `INVALID`。
+
+### Added —— 示例与测试
+
+- `examples/`：三个代表 Spec（PASS / PRODUCT_BUG / FLAKY）+ `fake-app.mjs` + 接线文档。
+- `tests/`：61 个自动化测试，覆盖 Case / 状态机 / Attempt / Assertion / Evidence /
+  Resume / 六个终局状态可达性。
+
+### Changed
+
+- **取消证据轨 A/B 双轨**：证据不足只能进 `INCONCLUSIVE`，不再「降级后照常给结论」。
+- **Git 资产策略反转**（`templates/binding/auto-test.gitignore`）：
+  结构化测试事实（`run.json` / `events.jsonl` / `evidence-manifest.json` / `verdict.json`）
+  **必须入库**，只排除二进制证据本体。v1.x 把 `state/` `diagnostics/` `reports/*.jsonl`
+  全部忽略，导致 Regression 在结构上不可能实现。
+- 证据文件名内嵌类型（`ev_xxx.screenshot.png`），使 `.gitignore` 可按类型精确排除。
+- `SKILL.md` / `README.md` 增补 Harness Core 与 CLI 章节；Skill 定位向 Compatibility Layer 过渡。
+
+### Fixed —— Release Gate 审计发现（🔴 含一个 Release Blocker）
+
+- 🔴 **Projection 可伪造终局（Release Blocker）**：`verify()` 原先直接信任 `run.json`，
+  而后者只是一个可被文本编辑器修改的普通文件。实测：只真实执行一条 `run attempt-start`，
+  其余手改 `run.json`（Attempt 置 PASS、塞入断言、伪造 evidence_ref），即可拿到
+  `FINALIZED_PASS` + exit 0。
+  修复：新增 `deriveRunFacts(events)`，**所有判定改为从 `events.jsonl` 重建事实**；
+  同时比对 `run.json` 投影，任何不一致判 `PROJECTION_MISMATCH` → `INVALID`。
+- 🔴 **Case 契约可被投影篡改**：删掉 `run.json.case_assertions` 即可绕过"必需断言"Gate。
+  修复：Case 契约（声明的断言与 `case_flags`）写入 `RUN_CREATED` 事件，进入不可篡改的事件流。
+- 🔴 **悬空 evidence_ref 被算作满足 Evidence Policy**：原先只数 `evidence_refs.length`，
+  编造一个不存在的 id 就能满足"每条必需断言至少一份证据"。
+  修复：引用必须在 Manifest 中真实存在；悬空引用判 `EVIDENCE_REF_DANGLING` → `INVALID`。
+- **Case ID 未校验导致路径逃逸**：`case_id: "../../evil"` 会把 Case 写到资产目录之外。
+  修复：`assertValidCaseId()` 限定字符集并拒绝 `..`。
+
+### Fixed
+
+- Run ID 秒级粒度导致同一秒内创建多个 Run 冲突 —— 改为自动追加去重后缀。
+- 证据事件的 `type` 被 payload 覆盖成证据类型，导致 `EVIDENCE_REGISTERED`
+  不被计入执行事实、削弱谎报检测 —— 保留字段改为在展开之后写入。
+- Case 章节解析用了 JS 不支持的 `\Z`，导致**末尾章节**（断言表常在末尾）静默失配。
+
+### Preserved（明确未破坏）
+
+- Case 文件格式、生命周期状态机、Frontmatter 最小化回写、人工修改保护
+- Test Data Matrix 解析（含转义竖线 / code span / 占位符识别）
+- `completed ≠ PASS` 四维度正交模型、TRIAGE 失败分类法、安全边界与数据隔离
+- `/auto-test` 入口、Full-Auto / HITL 双模式
+
+### Not in Phase 1（明确后置）
+
+Step 级 Resume ｜ 完整 Regression ｜ Agent Evaluation ｜ MCP ｜ SDK ｜ SQLite ｜
+Multi-Agent Orchestrator（删除而非后置）｜ Model Router ｜ Plugin System ｜ Event Bus
+
+
 ## [1.1.0] - 2026-09-03
 
 **架构升级：单体 Skill + 集中式 Rules → Orchestrator + Specialized Sub-Agents +

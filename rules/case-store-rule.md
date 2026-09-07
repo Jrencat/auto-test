@@ -23,8 +23,10 @@
 - 目录可在绑定 `project.json.caseStore.casesDir` / `reportsDir` 覆盖，默认即上表
   （引擎不写死具体项目路径；`<cwd>` = 触发 `/auto-test` 的工作目录）。
 - 首次运行时创建缺失目录；**已存在的文件一律不动**。
-- `.auto-test/cases/` **建议提交入库**（测试资产随代码演进）；`.auto-test/reports/` 视团队约定，
-  binding 阶段在 `<cwd>/.auto-test/.gitignore` 里默认忽略 `reports/*.jsonl`。
+- `.auto-test/cases/` **必须提交入库**（测试资产随代码演进）。
+  〔2.0〕`runs/` 下的结构化事实（`run.json` / `events.jsonl` / `evidence-manifest.json` /
+  `verdict.json`）**同样必须入库**——否则历史 Run 无法比较，Regression 在结构上不可能实现；
+  只有二进制证据本体不入库。默认规则见 `templates/binding/auto-test.gitignore`。
 
 ### 与 `docs/testcases/<module>/` 的关系（兼容）
 

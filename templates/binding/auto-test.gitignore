@@ -1,0 +1,22 @@
+# .auto-test/ 资产目录忽略规则（Auto-Test 2.0）
+#
+# 原则：**结构化测试事实必须入库，二进制证据本体不入库。**
+# v1.x 曾把 state/ diagnostics/ reports/*.jsonl 全部忽略，导致历史 Run 无法比较、
+# Regression 在结构上不可能实现。2.0 反转这个默认。
+
+# ---- 必须入库（此处不写任何规则，即默认跟踪）----
+#   cases/                     测试用例资产（SSOT）
+#   runs/*/run.json            Run / Attempt / Assertion / Failure / Diagnostic 元数据
+#   runs/*/events.jsonl        执行事实事件流（复现与验证的唯一依据）
+#   runs/*/evidence-manifest.json  证据清单（path + sha256 + size）
+#   runs/*/verdict.json        终局判定
+#   policy.json                Evidence / Retry / Finalization 策略
+#   reports/*.md               人读报告
+
+# ---- 不入库：二进制证据本体（Manifest 已记录 path + sha256 + size）----
+runs/*/evidence/*.screenshot*
+runs/*/evidence/*.trace*
+runs/*/evidence/*.video*
+
+# ---- v1.x 遗留：results.json 的投影汇总，已被 runs/*/events.jsonl 取代 ----
+reports/*.jsonl

@@ -1,6 +1,6 @@
 ---
 name: auto-test
-version: 1.1.0
+version: 2.0.0
 description: 企业级自动化测试闭环编排（可移植全局引擎，Multi-Agent 架构）。当用户涉及自动化测试、测试用例、API 测试、E2E/UI 自动化、回归测试、测试报告、自动化测试修复，或提供页面集合/接口/流程/需求文档（如 docs/test-pages/**/页面.md）时使用。由 Orchestrator 调度 5 个专职 Sub-Agent（Preflight&Binding / Source Analyst / Case Designer / Script Engineer / Executor&Reporter），基于 Playwright（E2E+API）与数据库断言（项目自带的 DB 查询工具），完成"依赖预检→项目绑定解析→源码分析→维护 TestCase→维护脚本→真实执行→日志与数据库断言→回写状态→生成报告"的完整闭环。状态与产物全部落盘 .auto-test/，支持中断恢复（Resume）、HITL 真正挂起与 FAIL 诊断闭环。引擎本体零硬编码路径，项目信息从当前工作目录的绑定配置解析；默认追求"覆盖所有位置"的完备测试（主动识别多分支变体页面并全取值覆盖 + 每条输入做数据变体 + 充分性/中间态精确断言）并输出可直接交付客户的完备报告，无需用户逐次提示。
 ---
 
@@ -45,6 +45,50 @@ Claude Code 只从 `.claude/agents/` 与 plugin `agents/` 加载 Agent 定义，
 **两档都是真实的 Agent 工具调度**——Sub-Agent 在**独立上下文窗口**执行、独立持有工具结果、
 只回传结构化契约；差异仅在于角色定义是「已注册」还是「运行时加载」。
 **严禁**"读了 `agents/<name>.md` 然后 Orchestrator 自己干"的伪多 Agent 实现。
+
+## 🔒 Harness Core 与 CLI（2.0 Phase 1）
+
+> **Agent 决定「怎么测试」；Harness 决定「什么才算真的测试过」。**
+
+自 2.0 Phase 1 起，下列判定**不再由 Prompt 约束，而由代码强制**，本 Skill 不得自行实现或绕过：
+
+| 判定 | 归属 | 强制方式 |
+|------|------|---------|
+| Case 生命周期与状态转换 | `core/case-store.mjs` | 非法转换直接抛错 |
+| 新 Case 至少一条 Assertion 才能进 READY | `core/case-store.mjs` | `ASSERTION_REQUIRED` 抛错 |
+| Attempt 历史不可覆盖 | `core/run-store.mjs` | Retry 追加新 Attempt |
+| 已 FINALIZED 的 Run 不可写 | `core/run-store.mjs` | `RUN_IMMUTABLE` 抛错 |
+| 证据完整性（SHA256） | `core/evidence-store.mjs` | 不匹配即判 `INVALID` |
+| Agent Claim 与执行事实是否一致 | `core/verify.mjs` | 谎报即判 `INVALID` |
+| 最终状态 | `core/finalize.mjs` | **唯一有权写 `final_status` 的地方** |
+
+正式 CLI 名称：**`auto-test`**（与仓库名、Skill 名、`/auto-test` 入口一致）。
+
+```bash
+auto-test case new --id TC-X-001 --title "..."      # 新 Case 一律落 pending_review(DRAFT)
+auto-test case assert-add TC-X-001 --id A1 --description "..."
+auto-test case ready TC-X-001                       # 无断言时拒绝，退出码 1
+
+auto-test run start --case TC-X-001 --actor agent --runtime claude-code
+auto-test run attempt-start <runId>
+auto-test run step     <runId> --attempt A001 --name "..."
+auto-test run evidence <runId> --attempt A001 --type screenshot --file <path>
+auto-test run assert   <runId> --attempt A001 --assertion A1 --status PASS --evidence <evId>
+auto-test run attempt-finish <runId> --attempt A001 --status PASS --exit-code 0
+auto-test run claim    <runId> --status PASS        # 只是 Claim，不是结论
+
+auto-test verify   <runId>    # 0 事实可信充分 ｜ 1 不充分 ｜ 2 不可信(INVALID)
+auto-test finalize <runId>    # 0 FINALIZED_PASS ｜ 1 其它终局 ｜ 2 INVALID
+auto-test resume   <runId>    # Run 级恢复，run_id 保持不变
+```
+
+未安装到 PATH 时用 `node <skillDir>/cli/auto-test.mjs <...>`。
+
+**终局状态**：`FINALIZED_PASS` / `FINALIZED_FAIL` / `FLAKY` / `BLOCKED` / `INCONCLUSIVE` / `INVALID`。
+Agent 声称 PASS **不等于** `FINALIZED_PASS`；证据不足只能进 `INCONCLUSIVE`，
+v1.x 的「证据轨 B 降级」通道已取消。
+
+接线示例与迁移模式见 `examples/README.md`；架构依据见 `docs/architecture/`。
 
 ## 🌐 可移植定位
 
@@ -183,6 +227,11 @@ node <skillDir>/scripts/install-agents.mjs           # 装到 ~/.claude/agents/�
 | `agents/case-designer.md` | 去重/增量 Case + Test Data Matrix + HITL 挂起 Agent → `cases/*` |
 | `agents/script-engineer.md` | Case→Script + 数据/变体驱动 + 一致性检查 Agent → `<frontend>/tests/*` |
 | `agents/executor-reporter.md` | 真实执行 + 证据 + TRIAGE 诊断 + 报告 Agent → `reports/*` `diagnostics/*` |
+| `core/` | **〔2.0〕Harness Core**：Case / Run / Attempt / Assertion / Evidence / Policy / Verify / Finalize |
+| `cli/auto-test.mjs` | **〔2.0〕正式 CLI**：`case` / `run` / `verify` / `finalize` / `resume`，以退出码强制约束 |
+| `examples/` | **〔2.0〕三个代表 Spec + 接线模式**（`node examples/run-specs.mjs` 零依赖可跑） |
+| `tests/` | **〔2.0〕Core 自动化测试**（`npm test`，`node --test`，零依赖） |
+| `docs/architecture/` | **〔2.0〕架构审计与设计**：能力矩阵 / Harness 架构 / 测试模型 / Policy / 迁移计划 |
 | `scripts/install-agents.mjs` | 把 Agent 注册到 `.claude/agents/`（幂等，启用 Tier A；`--check`/`--project`/`--uninstall`） |
 | `scripts/validate-structure.mjs` | 引擎结构自检：frontmatter / 必需章节 / 交叉引用 / 硬编码路径 / JSON 块 |
 | `prompts/orchestrator.md` | **调度 Prompt**：Tier 判定 / 状态校正 / 输入契约 / 回执处理 / Final Gate |

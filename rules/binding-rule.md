@@ -45,7 +45,7 @@
 ├── diagnostics/  # 〔v1.1.0〕FAIL 诊断入口（DIAG-<RunId>.json/.md）
 ├── state/        # 〔v1.1.0〕编排状态：pipeline.json + contracts/
 │   └── contracts/
-└── .gitignore    # 默认忽略 reports/*.jsonl；v1.1.0 追加建议忽略 state/ 与 diagnostics/
+└── .gitignore    # 〔2.0〕由 templates/binding/auto-test.gitignore 生成：结构化事实入库，只排除二进制证据
 ```
 
 - 完整布局与用途见 `rules/pipeline-state-rule.md §一`。

@@ -1,0 +1,42 @@
+{
+  "name": "auto-test",
+  "version": "2.0.0",
+  "description": "Agent-Native Software Testing Harness —— Agent 决定怎么测试，Harness 保证什么才算真的测试过",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "auto-test": "./cli/auto-test.mjs"
+  },
+  "exports": {
+    ".": "./core/index.mjs"
+  },
+  "files": [
+    "core",
+    "cli",
+    "rules",
+    "templates",
+    "agents",
+    "prompts",
+    "configs",
+    "scripts",
+    "SKILL.md",
+    "README.md",
+    "USAGE.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "validate": "node scripts/validate-structure.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "testing",
+    "harness",
+    "agent",
+    "playwright",
+    "evidence",
+    "verification"
+  ]
+}

@@ -29,3 +29,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# 本仓库跑 examples/ 时产生的演示资产（非交付物）
+/.auto-test/

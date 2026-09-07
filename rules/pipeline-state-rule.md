@@ -25,7 +25,7 @@
 │   ├── pipeline.json           # 当前 Pipeline State
 │   └── contracts/              # 每次 Agent 调度的结构化回执
 │       └── <SEQ>-<agent>.json
-└── .gitignore              # 【已有】默认忽略 reports/*.jsonl（v1.1.0 追加 state/ diagnostics/ 建议项）
+└── .gitignore              # 〔2.0〕结构化事实入库，只排除二进制证据；见 templates/binding/auto-test.gitignore
 ```
 
 - 目录基准一律为 **`<cwd>`（仓库根）**，可被 `project.json.caseStore.*` 覆盖；
