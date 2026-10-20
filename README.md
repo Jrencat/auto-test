@@ -1,6 +1,6 @@
 # auto-test
 
-> 面向 **Claude Code** 的企业级自动化测试**闭环编排 Skill**。
+> 面向 **Claude Code / Codex CLI** 的企业级自动化测试**闭环编排 Skill**。
 > 一次跑通：源码分析 → 维护用例 → 维护脚本 → 真实执行 → 日志/数据库断言 → 回写状态 → 生成客户交付版报告。
 
 基于 **Playwright**（E2E + API）与数据库断言。引擎本体**零硬编码路径、零具体项目信息**，
@@ -62,6 +62,17 @@ Agent 无法绕过 Harness 直接宣布 `FINALIZED_PASS`——谎报、证据篡
 
 ## 快速上手
 
+跨 Agent 的安装、更新、卸载与冲突策略见 [INSTALL.md](INSTALL.md)。推荐从本仓库执行：
+
+```powershell
+node scripts/install-skill.mjs install --agent claude-code --scope user
+node scripts/install-skill.mjs install --agent codex --scope project --project "<业务仓库路径>"
+```
+
+安装仅复制完整 Skill，不初始化业务项目。Claude Code 使用 `/auto-test`，Codex CLI
+使用 `$auto-test`；Codex 需要可用的独立子 Agent 工具，否则返回 BLOCKED。
+以下保留 Claude 手动安装示例；完整 Agent 会话执行仍待验证。
+
 ```bash
 # 1) 安装到全局 skills 目录（或放进某仓库的 .claude/skills/）
 cp -r auto-test ~/.claude/skills/
@@ -116,7 +127,7 @@ pending_review --人工审核--> ready --开始执行--> running --> completed /
 
 ## 环境要求
 
-Claude Code · Node.js + npm · `@playwright/test` · Chromium（`npx playwright install chromium`）·
+Claude Code 或具备独立子 Agent 工具的 Codex CLI · Node.js >=18 + npm · `@playwright/test` · Chromium（`npx playwright install chromium`）·
 被测系统依赖服务 · （可选）一个可查询业务库的工具用于数据库断言。
 
 ## 目录结构

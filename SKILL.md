@@ -1,13 +1,19 @@
 ---
 name: auto-test
-version: 2.0.0
-description: 企业级自动化测试闭环编排（可移植全局引擎，Multi-Agent 架构）。当用户涉及自动化测试、测试用例、API 测试、E2E/UI 自动化、回归测试、测试报告、自动化测试修复，或提供页面集合/接口/流程/需求文档（如 docs/test-pages/**/页面.md）时使用。由 Orchestrator 调度 5 个专职 Sub-Agent（Preflight&Binding / Source Analyst / Case Designer / Script Engineer / Executor&Reporter），基于 Playwright（E2E+API）与数据库断言（项目自带的 DB 查询工具），完成"依赖预检→项目绑定解析→源码分析→维护 TestCase→维护脚本→真实执行→日志与数据库断言→回写状态→生成报告"的完整闭环。状态与产物全部落盘 .auto-test/，支持中断恢复（Resume）、HITL 真正挂起与 FAIL 诊断闭环。引擎本体零硬编码路径，项目信息从当前工作目录的绑定配置解析；默认追求"覆盖所有位置"的完备测试（主动识别多分支变体页面并全取值覆盖 + 每条输入做数据变体 + 充分性/中间态精确断言）并输出可直接交付客户的完备报告，无需用户逐次提示。
+description: Automate API, E2E and regression testing in business repositories with persistent cases, Playwright, project binding and Harness-verified evidence reports. Use with Claude Code or Codex CLI with independent subagents; supports human review and disk-based resume.
 ---
 
 # auto-test —— 自动化测试闭环编排 Skill（全局可移植引擎）
 
 本 Skill 是**编排层（Orchestration）**：负责路由、调度、规则引用与 Prompt 编排，
 不承载具体业务逻辑。所有执行规范、模板、配置均外置于本目录，支持长期增量演进。
+
+## Cross-Agent Entry (Read First)
+
+Read [host compatibility](rules/agent-compatibility.md) before the orchestrator.
+Claude Code invokes `/auto-test`; Codex CLI invokes `$auto-test`. Map Claude tool
+names using that rule on Codex. See [INSTALL.md](INSTALL.md) for installation.
+Resolve `skillDir` from this loaded file; keep `cwd` in the business repository.
 
 ## 🏛 架构（v1.1.0 Multi-Agent）
 
@@ -88,7 +94,7 @@ auto-test resume   <runId>    # Run 级恢复，run_id 保持不变
 Agent 声称 PASS **不等于** `FINALIZED_PASS`；证据不足只能进 `INCONCLUSIVE`，
 v1.x 的「证据轨 B 降级」通道已取消。
 
-接线示例与迁移模式见 `examples/README.md`；架构依据见 `docs/architecture/`。
+接线示例与迁移模式见 `examples/README.md`；架构依据见源仓库 `docs/architecture/`（非运行依赖）。
 
 ## 🌐 可移植定位
 
@@ -266,7 +272,7 @@ node <skillDir>/scripts/install-agents.mjs           # 装到 ~/.claude/agents/�
 ## 项目规范优先
 
 执行前必须遵循目标项目既有规范（冲突时项目规范优先）：
-`CLAUDE.md`、`.claude/rules/*`、`MEMORY.md`（如存在）。例如某些项目禁止前端格式化、禁止改后端后编译等。
+`AGENTS.md`、`CLAUDE.md`、`.claude/rules/*`、`MEMORY.md`（如存在）。例如某些项目禁止前端格式化、禁止改后端后编译等。
 
 ## 增量维护与自升级
 

@@ -1,6 +1,6 @@
 {
   "name": "auto-test",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Agent-Native Software Testing Harness —— Agent 决定怎么测试，Harness 保证什么才算真的测试过",
   "type": "module",
   "license": "MIT",
@@ -22,11 +22,14 @@
     "SKILL.md",
     "README.md",
     "USAGE.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "examples",
+    "INSTALL.md"
   ],
   "scripts": {
     "test": "node --test \"tests/*.test.mjs\"",
-    "validate": "node scripts/validate-structure.mjs"
+    "validate": "node scripts/validate-structure.mjs",
+    "skill:install": "node scripts/install-skill.mjs"
   },
   "engines": {
     "node": ">=18"

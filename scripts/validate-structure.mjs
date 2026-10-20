@@ -25,7 +25,8 @@ const ok = (cond, msg) => { checks++; if (!cond) errors.push(msg); };
 
 // ---------- 1. 必要文件 ----------
 const REQUIRED = [
-  'SKILL.md', 'USAGE.md', 'CHANGELOG.md',
+  'SKILL.md', 'USAGE.md', 'CHANGELOG.md', 'INSTALL.md',
+  'rules/agent-compatibility.md', 'scripts/install-skill.mjs',
   'prompts/orchestrator.md',
   'agents/orchestrator.md', 'agents/preflight-binding.md', 'agents/source-analyst.md',
   'agents/case-designer.md', 'agents/script-engineer.md', 'agents/executor-reporter.md',
@@ -39,6 +40,14 @@ const REQUIRED = [
   'configs/project.schema.md',
 ];
 for (const f of REQUIRED) ok(existsSync(join(ROOT, f)), `缺少必要文件: ${f}`);
+
+const skill = readFileSync(join(ROOT, 'SKILL.md'), 'utf8');
+const skillFrontmatter = skill.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+ok(!!skillFrontmatter, 'SKILL.md: missing standard frontmatter');
+if (skillFrontmatter) {
+  ok(/^name: auto-test$/m.test(skillFrontmatter[1]), 'SKILL.md: expected name auto-test');
+  ok(/^description: .{20,1024}$/m.test(skillFrontmatter[1]), 'SKILL.md: expected concise description');
+}
 
 // ---------- 2. agents frontmatter + 章节 ----------
 const AGENT_SECTIONS = ['Role', 'Responsibilities', 'Non-Responsibilities', 'Allowed Rules',

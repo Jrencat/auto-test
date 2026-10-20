@@ -1,5 +1,9 @@
 # auto-test 使用文档
 
+> 跨 Agent 安装、更新、卸载与验证边界见 [INSTALL.md](INSTALL.md)。本文保留 Claude
+> 操作示例；Codex 使用 `$auto-test`，先读 `rules/agent-compatibility.md`。
+> 安装成功、业务初始化成功和测试通过是三个独立结果。
+
 > 一个面向 **Claude Code** 的企业级自动化测试**闭环编排 Skill**。
 > 基于 Playwright（E2E + API）与数据库断言，把「源码分析 → 维护用例 → 维护脚本 → 真实执行 →
 > 日志/数据库断言 → 回写状态 → 生成客户交付版报告」做成一次可重复的完整闭环。

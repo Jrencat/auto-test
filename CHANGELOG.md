@@ -13,6 +13,15 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-19
+
+### Added
+
+- 标准跨 Agent Skill 入口及 Claude Code / Codex CLI 工具适配规则。
+- 零依赖完整安装、显式更新、卸载与本地修改冲突保护，支持用户级和项目级范围。
+- 安装生命周期、脱离源仓库执行 CLI 的回归检查，分发补全示例和安装文档。
+- 保留 Harness、项目绑定、证据原则与六种终局状态，不在安装时初始化业务仓库。
+
 ## [2.0.0] - 2026-09-07
 
 **Auto-Test 从「Agent 引导式测试 Skill」升级为「Agent-Native Software Testing Harness Foundation」。**
