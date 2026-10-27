@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,7 @@ export function skillTarget({ agent, scope, project = process.cwd(), home = home
 }
 
 function filesUnder(root, prefix = '') {
-  const result = {};
+  const result = Object.create(null);
   for (const name of readdirSync(join(root, prefix))) {
     const key = prefix ? `${prefix}/${name}` : name;
     const path = join(root, key);
@@ -33,14 +33,22 @@ function filesUnder(root, prefix = '') {
 }
 
 function payload(root) {
+  if (lstatSync(root).isSymbolicLink()) throw new Error('Refusing linked source');
+  if (lstatSync(join(root, 'package.json')).isSymbolicLink()) throw new Error('Refusing linked package.json');
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  const result = {};
+  if (pkg.name !== 'auto-test' || typeof pkg.version !== 'string' || !Array.isArray(pkg.files)) throw new Error('Invalid auto-test package');
+  const result = Object.create(null);
   for (const name of [...pkg.files, 'package.json', 'LICENSE']) {
+    // The distribution allowlist must never select parents, hidden stores or arbitrary paths.
+    if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) throw new Error(`Unsafe payload path: ${name}`);
     const path = join(root, name);
     if (lstatSync(path).isSymbolicLink()) throw new Error(`Refusing symbolic link: ${path}`);
     if (lstatSync(path).isDirectory()) {
       for (const [key, bytes] of Object.entries(filesUnder(path))) result[`${name}/${key}`] = bytes;
     } else result[name] = readFileSync(path);
+  }
+  for (const required of ['SKILL.md', 'core/index.mjs', 'cli/auto-test.mjs', 'scripts/install-skill.mjs', 'rules/agent-compatibility.md', 'templates/scaffold/.env.test.example']) {
+    if (!result[required]) throw new Error(`Missing required payload file: ${required}`);
   }
   return { pkg, files: result };
 }
@@ -59,14 +67,35 @@ function assertOwned(target) {
   }
 }
 
-export function manageSkill({ action, target, root = source, check = false }) {
+export function manageSkill({ action, target, root = source, check = false, io = { writeFileSync, renameSync } }) {
   if (!['install', 'update', 'uninstall'].includes(action)) throw new Error('Choose install|update|uninstall');
   target = resolve(target);
   const rel = relative(resolve(root), target);
   // Installing beneath the source would make packaging consume its own output.
   if (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)) throw new Error('Target cannot be inside source');
+  const reverse = relative(target, resolve(root));
+  if (!isAbsolute(reverse) && reverse !== '..' && !reverse.startsWith(`..${sep}`)) throw new Error('Target cannot contain source');
   for (let path = target; dirname(path) !== path; path = dirname(path)) {
     if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new Error(`Refusing linked target path: ${path}`);
+  }
+  const lock = `${target}.auto-test-lock`;
+  if (check) {
+    if (existsSync(lock)) throw new Error(`Installation is locked: ${lock}`);
+    return manageUnlocked({ action, target, root, check, io });
+  }
+  mkdirSync(dirname(target), { recursive: true });
+  mkdirSync(lock);
+  try { return manageUnlocked({ action, target, root, check, io }); }
+  finally { rmSync(lock, { recursive: true }); }
+}
+
+function manageUnlocked({ action, target, root, check, io }) {
+  const backup = `${target}.auto-test-backup`;
+  if (existsSync(backup)) {
+    assertOwned(backup);
+    if (existsSync(target)) throw new Error(`Interrupted operation: preserve and move backup before continuing: ${backup}`);
+    if (check) throw new Error(`Recovery required: rerun without --check to restore ${backup}`);
+    renameSync(backup, target);
   }
   const present = existsSync(target);
   if (present) assertOwned(target);
@@ -83,13 +112,33 @@ export function manageSkill({ action, target, root = source, check = false }) {
     return { action, target, changed: false, check };
   }
   if (!check) {
-    if (present) rmSync(target, { recursive: true });
-    mkdirSync(target, { recursive: true });
-    for (const [key, bytes] of Object.entries(files)) {
-      mkdirSync(dirname(join(target, key)), { recursive: true });
-      writeFileSync(join(target, key), bytes);
+    let staging;
+    let moved = false;
+    try {
+      staging = mkdtempSync(`${target}.auto-test-stage-`);
+      for (const [key, bytes] of Object.entries(files)) {
+        mkdirSync(dirname(join(staging, key)), { recursive: true });
+        io.writeFileSync(join(staging, key), bytes);
+      }
+      const digest = hash(Buffer.from(JSON.stringify(hashes)));
+      io.writeFileSync(join(staging, marker), JSON.stringify({ owner: 'auto-test', schema: 1, version: pkg.version,
+        source: { kind: 'local-payload', version: pkg.version, sha256: digest }, hashes }, null, 2) + '\n');
+      assertOwned(staging);
+      // Recheck ownership after staging, then swap on the same filesystem; retain a recovery copy until commit.
+      if (present) {
+        assertOwned(target);
+        io.renameSync(target, backup);
+        moved = true;
+      } else if (existsSync(target)) throw new Error('Installation appeared while staging');
+      try { io.renameSync(staging, target); }
+      catch (error) {
+        if (moved) renameSync(backup, target);
+        throw error;
+      }
+      if (moved) rmSync(backup, { recursive: true });
+    } finally {
+      if (staging && existsSync(staging)) rmSync(staging, { recursive: true });
     }
-    writeFileSync(join(target, marker), JSON.stringify({ owner: 'auto-test', schema: 1, version: pkg.version, hashes }, null, 2) + '\n');
   }
   return { action, target, changed: true, check, version: pkg.version, status: 'SKILL_INSTALLED_ONLY' };
 }

@@ -39,6 +39,10 @@ Artifact 的**存在性/文件名/大小**、Agent 回执。
 
 ## 一、判定 Dispatch Tier（每次运行开头做一次）
 
+先应用 `rules/agent-compatibility.md`：没有独立子 Agent 工具时选择 **Tier C**，
+明确声明共享上下文串行角色执行，按该规则的例外切换角色并校验磁盘契约。
+以下 A/B 分派及禁止亲自执行条款仅适用于具备独立调度能力的会话。
+
 查看本会话可用的 Agent 类型列表：
 
 - 列表中存在 `auto-test-source-analyst` 等类型 → **Tier A**
@@ -233,7 +237,7 @@ Allowed Rules / Output / State Transitions / Error Handling / Idempotency。
 
 ```
 Pipeline State : FINALIZED
-Dispatch Tier  : A（原生 Sub-Agent）| B（general-purpose 承载）
+Dispatch Tier  : A（原生 Sub-Agent）| B（独立通用 Agent 承载）| C（共享上下文串行角色）
 Agent 调度     : preflight-binding ✅ → source-analyst ✅ → case-designer ✅ → script-engineer ✅ → executor-reporter ✅
 ```
 

@@ -349,6 +349,10 @@ Step11 Final Gate          · Orchestrator         逐项验收 + Self Review + 
 
 ### 调度机制（Dispatch Tier）
 
+没有独立子 Agent 工具的宿主采用 `rules/agent-compatibility.md` 的 **Tier C**：
+在共享上下文中显式串行切换角色，逐阶段真实执行并校验磁盘契约，不宣称独立审查。
+以下两档描述具备独立调度工具时的路径，HITL、诊断和 Harness 验收同样适用于 Tier C。
+
 Claude Code 只从 `.claude/agents/` 与 plugin `agents/` 加载 Agent 定义，**不加载 Skill 目录下的
 `agents/`**。因此提供两档，**运行时自动判定**：
 

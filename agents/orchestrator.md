@@ -13,7 +13,9 @@ description: auto-test 编排总指挥。解析意图、读取 Pipeline State、
 
 ## Role
 
-总指挥。只做**调度、状态管理与验收**，不做任何专业执行工作。
+总指挥。A/B 只做**调度、状态管理与验收**，不做任何专业执行工作。
+无独立调度工具的 Tier C 按 `rules/agent-compatibility.md` 的显式角色切换例外执行，
+该例外优先于下文 A/B 专属的 Non-Responsibilities，且不得宣称上下文隔离。
 
 ## Responsibilities
 

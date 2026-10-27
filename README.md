@@ -1,6 +1,6 @@
 # auto-test
 
-> 面向 **Claude Code / Codex CLI** 的企业级自动化测试**闭环编排 Skill**。
+> 面向 **Agent Skills 宿主**的企业级自动化测试**闭环编排 Skill**；各宿主验证状态见下方安装说明。
 > 一次跑通：源码分析 → 维护用例 → 维护脚本 → 真实执行 → 日志/数据库断言 → 回写状态 → 生成客户交付版报告。
 
 基于 **Playwright**（E2E + API）与数据库断言。引擎本体**零硬编码路径、零具体项目信息**，
@@ -62,26 +62,59 @@ Agent 无法绕过 Harness 直接宣布 `FINALIZED_PASS`——谎报、证据篡
 
 ## 快速上手
 
-跨 Agent 的安装、更新、卸载与冲突策略见 [INSTALL.md](INSTALL.md)。推荐从本仓库执行：
+无需先克隆仓库。准备 **Node.js >=22.20 和 Git**，在业务仓库打开终端：
 
 ```powershell
-node scripts/install-skill.mjs install --agent claude-code --scope user
-node scripts/install-skill.mjs install --agent codex --scope project --project "<业务仓库路径>"
+npx.cmd skills@1.7.4 add Jrencat/auto-test --skill auto-test --agent codex --copy
 ```
 
-安装仅复制完整 Skill，不初始化业务项目。Claude Code 使用 `/auto-test`，Codex CLI
-使用 `$auto-test`；Codex 需要可用的独立子 Agent 工具，否则返回 BLOCKED。
-以下保留 Claude 手动安装示例；完整 Agent 会话执行仍待验证。
+这是 Windows PowerShell 可直接使用的命令；macOS/Linux 使用 `npx`。
+Claude Code 将 `codex` 替换成 `claude-code`；追加 `--global` 安装到个人范围。
+默认项目安装位置：Codex 为 `.agents/skills/auto-test/`，Claude 为
+`.claude/skills/auto-test/`；个人范围对应 `~/.agents/skills/auto-test/` 和
+`~/.claude/skills/auto-test/`（自定义宿主配置可能改变路径）。
 
-```bash
-# 1) 安装到全局 skills 目录（或放进某仓库的 .claude/skills/）
-cp -r auto-test ~/.claude/skills/
+### 更新与卸载
 
-# 2) 在 Claude Code 里，进入你的项目工作目录后触发
+在同一业务仓库、用同一管理器操作；个人安装在下列命令中追加 `--global`。
+先将手动修改及额外文件备份到安装目录外，检查目标和覆盖提示后再确认：
+
+```powershell
+npx.cmd skills@1.7.4 check
+npx.cmd skills@1.7.4 update auto-test
+npx.cmd skills@1.7.4 remove auto-test
+```
+
+标准 CLI 管理下载、锁记录和替换/移除；其锁文件不提供本地修改保护或回滚保证。
+卸载按 Skill 名称移除当前作用域的共享安装；不要仅指定 `--agent codex`，该 CLI
+版本在实测中可能保留共享目录。其他宿主若共用该目录，也会失去这个 Skill。
+不要混用标准 CLI 与本项目离线安装器。需要保护式更新、Node 18/20 或手动审阅时，
+使用 [INSTALL.md 的压缩包与离线安装流程](INSTALL.md#reviewed-archive-and-protected-offline-installation)。
+明确分支、标签和完整 commit SHA 的安装方式也见该文档。
+
+### 安装后调用
+
+安装不会初始化业务项目。重开 Agent 会话，在业务仓库中使用 Codex `$auto-test`
+或 Claude Code `/auto-test`。缺少独立子 Agent 时可按宿主适配规则使用明确标记的
+Tier C 串行角色模式；上下文隔离受限，真实执行、证据及 Harness 验收要求不变。
+首次初始化仍由已有 preflight/binding 流程独立完成。
+
+Windows 已验证 Codex 目录的真实网络安装，以及实际 Codex 会话发现 Skill 并调用
+Harness CLI；完整业务测试流程尚未验证。
+Claude 的离线路径/复制有测试，实际宿主会话仍为 **UNVERIFIED**。Gemini CLI、Cursor、
+Copilot、OpenCode、Windsurf、Cline、Roo 的标准安装目标已核对，但本项目宿主调用
+均为 **UNVERIFIED**，不能据此宣称全部兼容。详见 [路径与状态表](INSTALL.md#agents-locations-and-verification)
+和 [验证记录](docs/installation-validation.md)。
+
+```text
 /auto-test                              # 未指定模式时会询问一次
 /auto-test --mode full-auto             # 全自动：生成 → 执行 → 报告
 /auto-test --mode human-in-the-loop     # 生成用例与具体数据后挂起，等人工审核
 ```
+
+以上为 Claude 调用示例；Codex 使用 `$auto-test`，其他宿主通过其 Skill 选择器加载。
+PowerShell 若阻止 `npx.ps1`，用 `npx.cmd` 即可，无需管理员权限或修改执行策略。
+网络错误、Skill 未显示、已有目录冲突的处理见 [常见问题](INSTALL.md#troubleshooting)。
 
 Human-in-the-Loop 的两段式节奏：
 

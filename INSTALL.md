@@ -1,141 +1,196 @@
-# Install auto-test
+﻿# Install, update and remove auto-test
 
-auto-test 2.1.0 supports Claude Code and Codex CLI. Node.js >=18 is required.
-The MIT license is retained. No runtime dependencies are added. This repository
-has an npm files allowlist and version/changelog, but no automated release workflow.
-`npm pack` builds a distributable archive; this change does not publish to npm.
+## Quick install (no manual clone)
 
-## Host discovery and invocation
+Install **Node.js >=22.20 and Git** for the standard installer. The Harness and
+protected offline installer still require only Node.js >=18. No Python, global
+npm install, administrator access or execution-policy change is required.
+Run from your business repository:
 
-| Host | User scope | Project scope | Invocation |
-| --- | --- | --- | --- |
-| Claude Code | `~/.claude/skills/auto-test/` | `<project>/.claude/skills/auto-test/` | `/auto-test` |
-| Codex CLI | `~/.agents/skills/auto-test/` | `<project>/.agents/skills/auto-test/` | `$auto-test` |
-
-`~` is resolved with Node's os.homedir(), not a drive or username. Claude user
-scope honors CLAUDE_CONFIG_DIR. Codex uses the shared .agents discovery location;
-CODEX_HOME is not used as its replacement. Restart/open a session after installation
-and verify the skill appears. Project skills can take precedence over user skills;
-avoid maintaining divergent copies at both scopes.
-
-The root SKILL.md is the standard entry for both hosts. It routes to
-rules/agent-compatibility.md before the existing orchestrator prompt. Claude
-keeps native Tier A or general-purpose Tier B dispatch. Codex maps each role to
-available independent subagent tools; without those tools it returns BLOCKED.
-The installer never changes Agent settings or enables experimental capabilities.
-See the compatibility rule for question tools, project instructions and runtime labels.
-
-## Install, inspect, update, uninstall
-
-Run these commands from a source checkout or an extracted package directory.
-Choose exactly one host (`claude-code` or `codex`) and scope (`user` or `project`).
-Examples work in PowerShell; quote paths with spaces.
-
-```powershell
-node scripts/install-skill.mjs install --agent claude-code --scope user --check
-node scripts/install-skill.mjs install --agent claude-code --scope user
-node scripts/install-skill.mjs install --agent codex --scope user
-node scripts/install-skill.mjs install --agent codex --scope project --project "<business-repository>"
+```sh
+npx skills@1.7.4 add Jrencat/auto-test --skill auto-test --agent codex --copy
 ```
 
-`--check` validates the payload and conflicts without writing. `--project` defaults
-to cwd for project scope. Installation copies the npm files allowlist plus
-package.json and LICENSE, including hidden scaffold files. No links to the source
-checkout, global PATH installation, business bindings or dependency installation
-are required. Installed layout:
+For Claude Code replace `codex` with `claude-code`. Add `--global` for personal
+installation across projects; otherwise installation is project-local. Review the
+displayed target and overwrite prompts before confirming. `--copy` avoids Windows
+symlink privileges. **PowerShell:** use `npx.cmd` if policy blocks `npx.ps1`.
+
+The pinned CLI version makes these commands reproducible. Vercel skills manages
+network retrieval, repository snapshots, discovery, destinations and lockfiles.
+The root SKILL.md already contains the complete Skill; no duplicate core is needed.
+Installation does not initialize projects, install Playwright or register subagents.
+
+## Update and uninstall
+
+Use the original manager and scope. Run project commands from that same project;
+add `--global` for personal scope:
+
+```sh
+npx skills@1.7.4 check
+npx skills@1.7.4 update auto-test
+npx skills@1.7.4 remove auto-test
+```
+
+`check` checks tracked skills; `update auto-test` limits updates to this skill.
+Review the scope and targets. Removal leaves business bindings, cases, scripts and
+reports alone. Do not use `remove --all`.
+Removal by name cleans this skill's shared installation in the chosen scope,
+including other hosts using that shared directory. In 1.7.4, specifying only
+`--agent codex` can report success while retaining the shared directory and lock;
+the command above was verified to remove both. Preserve other hosts' needs first.
+
+**Back up manual Skill edits and extra files outside the installation first.**
+The standard CLI owns replacement/removal: its hash lock records are not a backup,
+local-change guard, authenticated provenance or transactional rollback guarantee.
+Do not apply it over a customized or offline-managed installation. On interruption,
+preserve the directory and reinstall the same source/ref into a clean location.
+For modification refusal and staged replacement, use the offline manager below.
+
+## Select a version
+
+The unqualified source uses the default branch. Quote a source fragment to select
+an explicit branch, tag or **full 40-character commit SHA**:
+
+```sh
+npx skills@1.7.4 add "Jrencat/auto-test#main" --skill auto-test --agent codex --copy
+npx skills@1.7.4 add "Jrencat/auto-test#v2.0.0" --skill auto-test --agent codex --copy
+npx skills@1.7.4 add "Jrencat/auto-test#<40-character-commit-SHA>" --skill auto-test --agent codex --copy
+```
+
+Replace the SHA placeholder. The tag is a historical release and lacks newer
+changes. Use a SHA for immutable selection; branches and movable tags can change.
+Each add obtains one Git checkout. Missing refs fail without selecting the default
+branch. Git can convert line endings according to local configuration. Retain the
+source/ref alongside the lockfile: project lock formats may omit ref details.
+To deliberately change releases, rerun `add` with the desired ref after backing up
+edits. A pinned SHA does not advance on update.
+
+This project adds **no custom network downloader or archive extractor**. Standard
+GitHub installation uses Git HTTPS; ancillary check/update operations may require
+other endpoints. Raw, API and codeload reachability are independent. An endpoint
+failure must not be treated as permission to substitute another release.
+
+## Agents, locations and verification
+
+These are skills **1.7.4** mappings in copy mode with default configuration.
+Append `auto-test/` to each directory; `~` is the user's home. Shared project paths
+can represent one physical installation used by several hosts.
+
+| Agent / CLI value | Project directory | Personal directory | auto-test status |
+| --- | --- | --- | --- |
+| Codex / `codex` | `.agents/skills/` | `~/.agents/skills/` | Windows network install, real Codex discovery and CLI invocation verified |
+| Claude Code / `claude-code` | `.claude/skills/` | `~/.claude/skills/` | Offline path/copy tested; host session UNVERIFIED |
+| Gemini CLI / `gemini-cli` | `.agents/skills/` | `~/.gemini/skills/` | UNVERIFIED |
+| Cursor / `cursor` | `.agents/skills/` | `~/.cursor/skills/` | UNVERIFIED |
+| GitHub Copilot / `github-copilot` | `.agents/skills/` | `~/.copilot/skills/` | UNVERIFIED |
+| OpenCode / `opencode` | `.agents/skills/` | `~/.config/opencode/skills/` | UNVERIFIED |
+| Windsurf / `windsurf` | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` | UNVERIFIED |
+| Cline / `cline` | `.agents/skills/` | `~/.agents/skills/` | UNVERIFIED |
+| Roo Code / `roo` | `.roo/skills/` | `~/.roo/skills/` | UNVERIFIED |
+
+UNVERIFIED means the installer documents that target, not that this project has
+verified discovery or business execution. It is not a support guarantee. Consult
+the host's skill picker and current documentation. Custom host configuration may
+change personal paths, for example Claude's CLAUDE_CONFIG_DIR.
+
+## Start auto-test
+
+Open your business repository. Codex: `$auto-test` or select through `/skills`.
+Claude Code: `/auto-test`. Other hosts: select the skill or ask explicitly to load
+auto-test; exact invocation syntax remains UNVERIFIED. Restart if discovery is
+stale. Avoid divergent personal/project copies.
 
 ```text
-auto-test/
-  SKILL.md, package.json, LICENSE, README.md, USAGE.md, INSTALL.md, CHANGELOG.md
-  core/, cli/, configs/, rules/, prompts/, agents/, templates/, scripts/, examples/
-  .auto-test-install.json
+$auto-test --mode human-in-the-loop <requirements-document>
 ```
 
-From a newer checkout/archive, explicitly update the same host and scope:
+Initialization happens after invocation through existing preflight/binding rules.
+All hosts reuse `.claude/auto-test/project.json`; this legacy storage location is
+independent of discovery. Existing configuration, credentials, tests and project
+instructions must be preserved. No CLI `init` is introduced. Business execution
+separately requires appropriate Playwright/browser, services and database tools.
 
-```powershell
-node scripts/install-skill.mjs update --agent codex --scope user --check
+Independent subagents retain A/B dispatch. Hosts without them can use explicit
+**Tier C serial roles in one shared context**, per `rules/agent-compatibility.md`.
+This loses independent context/review, but preserves stage contracts, real
+execution, evidence, FAIL diagnosis, retry limits, HITL, pause/resume and Harness
+finalization. Missing execution capabilities still block the affected stage.
+
+For a read-only installation smoke check, run from the business cwd:
+
+```sh
+node "<installed-auto-test-directory>/cli/auto-test.mjs" case list
+```
+
+This lists cases; it does not establish business test success or add a PATH command.
+Only the unchanged Harness verify/finalize logic establishes FINALIZED_PASS.
+
+## Reviewed archive and protected offline installation
+
+For Node 18/20, offline systems or stricter local-change protection, download one
+trusted revision's archive, extract and review it, then use its bundled installer.
+A fixed-SHA browser download URL is:
+
+```text
+https://codeload.github.com/Jrencat/auto-test/zip/<40-character-commit-SHA>
+```
+
+Use a platform archive tool; never overlay different releases. A locally computed
+hash alone does not authenticate a release; compare publisher checksums through a
+trusted channel when available. The offline manager accepts extracted directories,
+not ZIPs, URLs or remote scripts. At this step it needs no Git or network.
+Run from the extracted release, **outside the installation target**:
+
+```sh
+node scripts/install-skill.mjs install --agent codex --scope user --check
+node scripts/install-skill.mjs install --agent codex --scope user
 node scripts/install-skill.mjs update --agent codex --scope user
-node scripts/install-skill.mjs uninstall --agent codex --scope user --check
 node scripts/install-skill.mjs uninstall --agent codex --scope user
 ```
 
-Repeat install is a no-op only when content matches. A different payload requires
-`update`. The manifest records hashes of every installed file. Install, update and
-uninstall refuse unmanaged directories, links, changed files and extra user files.
-There is no force flag: back up and move an existing/customized directory before
-installing, or reconcile it with the original managed release. Do not delete the
-manifest to resolve a conflict. Update replaces only an unchanged managed Skill;
-keep the previous archive if rollback is needed. Interrupted writes can leave an
-unmanaged installation: preserve/move it and reinstall. Updates must run from a
-separate checkout/archive, never from the installation being replaced.
-Uninstall removes only the managed Skill directory, preserving business bindings,
-tests, reports and separately registered Claude agents. The legacy optional
-`scripts/install-agents.mjs --uninstall [--project]` manages those agents separately.
+The adapter intentionally supports only `codex` and `claude-code`. Use
+`--scope project --project "<business-repository>"` for project scope. All actions
+accept `--check` without writes. It copies the npm allowlist plus package.json and
+LICENSE, including hidden scaffolds. `.auto-test-install.json` records version,
+local payload digest and per-file SHA256; it does not claim an authenticated
+remote commit. Original schema-1 installations remain compatible.
 
-## Third-party installer assessment
+Identical repeated install is a no-op; changed payloads require `update`. Unmanaged
+directories, links, modified files and extra files cause refusal. No force flag is
+provided. Preserve/move conflicts before switching managers; do not erase manifests.
 
-[Vercel skills](https://github.com/vercel-labs/skills) supports both hosts, scope
-selection and complete folder copying. It is an optional online distribution path:
+Updates stage and verify the whole payload beside the target before renaming.
+Failed writes, checksums or swaps preserve/restore the previous installation.
+A sibling `.auto-test-lock` prevents concurrent changes. After process termination,
+confirm no installer is running; preserve staging, backup and lock directories
+before moving a stale lock aside. An unchanged `.auto-test-backup` is restored on
+the next write if the target is absent. If both exist, the installer refuses to
+guess: preserve/move the backup first. Never delete uncertain recovery data.
+`--check` does not recover. Uninstall removes only an unchanged managed Skill;
+optional Claude registrations remain managed by `scripts/install-agents.mjs`.
 
-```powershell
-npx skills add Jrencat/auto-test --skill auto-test --agent claude-code --global --copy
-npx skills add Jrencat/auto-test --skill auto-test --agent codex --copy
-```
+## Troubleshooting
 
-The second command targets the current business project. Inspect existing files
-and back them up before using it; its replacement/conflict policy is owned by that
-tool. Use its `check`, `update` and `remove` commands and lockfile lifecycle for
-those installations. Do not mix managers: the local installer deliberately refuses
-third-party/manual installs without its own manifest. These online commands were
-assessed from documentation, not executed here. The small bundled installer exists
-for offline full-payload installation with tested local-change protection; it adds
-no package or background service dependency.
+- Missing npx/Git: install Node >=22.20 and Git, reopen your terminal, or use the
+  reviewed offline route with Node >=18.
+- PowerShell policy error: use `npx.cmd` / `npm.cmd`; administrator access and
+  system execution-policy changes are unnecessary.
+- Network failure: retain the first error and check that endpoint/proxy. A working
+  Git download does not establish Raw/API/codeload availability.
+- Missing skill: verify scope, target and SKILL.md, then restart the host. Do not
+  register Claude subagents for another host.
+- Conflict: preserve edits and extra files, then choose one manager. Lock records
+  do not replace backups or the offline ownership manifest.
 
-## First use in a business repository
+## Validation and sources
 
-1. Start the selected Agent in the business repository and invoke `/auto-test`
-   (Claude) or `$auto-test` (Codex), optionally with `--mode human-in-the-loop`
-   or `--mode full-auto` and input document paths.
-2. The existing preflight-binding role probes dependencies and project roots,
-   requests missing choices, reuses `.claude/auto-test/project.json`, refreshes
-   runtime.local.json and fills missing scaffold files per binding-rule.md.
-   This legacy binding path is deliberately shared on both hosts. Existing tests,
-   secrets, user configuration and project instructions must be detected/preserved.
-3. Continue the existing analysis, case, script, execution and report stages.
-   HITL persists pending_review and waits; resume reads disk and checks script
-   consistency. Missing services or tools yield a blocked outcome, not a pass.
-4. Invoke `node "<installed-skill>/cli/auto-test.mjs" ...` from the business cwd
-   for Harness commands. CLI has no standalone `init` command: initialization is
-   the existing Agent-guided process, not an installer side effect.
+Windows tests cover full copies, repeat/update/uninstall, customizations, unsafe
+payload paths, missing files, links, injected write/checksum/swap failures, locks
+and recovery. Actual network and host invocation outcomes are recorded in
+[installation validation](docs/installation-validation.md). Other host sessions
+and full business-project testing remain UNVERIFIED.
 
-Installation success, initialization success and actual test success are separate.
-`Agent Claim != Actual Evidence`. Reports retain the existing formats and Harness
-facts under `.auto-test/`; only verify/finalize can establish FINALIZED_PASS.
-All six terminal states and failure classifications are unchanged.
-
-## Verification and sources (2026-10-19)
-
-Windows checks cover host/scope path resolution with simulated homes, complete
-detached installation and CLI execution, repeat install, update, uninstall,
-conflicts and the existing Harness regression suite. They do not establish a
-Claude/Codex interactive test run or successful business-project initialization.
-Both hosts' discovery, subagent dispatch and end-to-end business execution remain
-pending real-session validation. Third-party online installation is also untested.
-
-The standard skill-creator quick validator could not run because the environment
-lacks PyYAML. The repository's zero-dependency structure check validates the entry
-name/description and required support files instead. Windows PowerShell blocks
-npm.ps1 here; checks use npm.cmd without changing the execution policy.
-
-- [Claude official Skills docs](https://code.claude.com/docs/en/skills): fetched;
-  confirms SKILL.md, personal/project paths and slash invocation.
-- [OpenAI official Skills docs](https://developers.openai.com/codex/skills): fetch
-  returned HTTP 403 in this environment; current official page could not be read.
-  Codex shared .agents paths are corroborated by the fetched skills installer
-  documentation and local Agent skill conventions; official recheck remains pending.
-- [skills installer docs](https://github.com/vercel-labs/skills): fetched and
-  assessed for supported hosts, scopes, copy mode and lifecycle commands.
-
-Before release, validate discovery and a real isolated business project on both
-hosts. A Skill invocation alone is never evidence that tests passed.
+- [skills CLI and requirements](https://github.com/vercel-labs/skills)
+- [Agent path mappings](https://github.com/vercel-labs/skills/blob/main/docs/agents.md)
+- [Official OpenAI discovery and invocation](https://developers.openai.com/codex/skills.md)

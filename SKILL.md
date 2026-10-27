@@ -1,6 +1,6 @@
 ---
 name: auto-test
-description: Automate API, E2E and regression testing in business repositories with persistent cases, Playwright, project binding and Harness-verified evidence reports. Use with Claude Code or Codex CLI with independent subagents; supports human review and disk-based resume.
+description: Automate API, E2E and regression testing in business repositories with persistent cases, Playwright, project binding and Harness-verified evidence reports. Use independent subagents when available or explicit serial roles; supports human review and disk-based resume.
 ---
 
 # auto-test —— 自动化测试闭环编排 Skill（全局可移植引擎）
@@ -14,6 +14,10 @@ Read [host compatibility](rules/agent-compatibility.md) before the orchestrator.
 Claude Code invokes `/auto-test`; Codex CLI invokes `$auto-test`. Map Claude tool
 names using that rule on Codex. See [INSTALL.md](INSTALL.md) for installation.
 Resolve `skillDir` from this loaded file; keep `cwd` in the business repository.
+Other standard Skills hosts use their skill picker or natural language. Without
+independent subagents, follow the explicit Tier C serial-role fallback in the
+compatibility rule; its execution exception takes precedence over the Tier A/B
+orchestrator-only prohibitions below. Never claim context isolation in Tier C.
 
 ## 🏛 架构（v1.1.0 Multi-Agent）
 

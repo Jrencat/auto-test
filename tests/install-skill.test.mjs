@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync, mkdirSync, readdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -73,5 +73,83 @@ test('update replaces an unchanged older payload but install requires an explici
     assert.throws(() => manageSkill({ action: 'install', target, root }), /use update/);
     manageSkill({ action: 'update', target, root });
     assert.equal(readFileSync(join(target, 'SKILL.md'), 'utf8'), readFileSync(entry, 'utf8'));
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('staging write, content verification and swap failures preserve the installed release', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'auto-test atomic '));
+  const target = join(temp, 'installed');
+  try {
+    manageSkill({ action: 'install', target });
+    const original = readFileSync(join(target, 'SKILL.md'), 'utf8');
+    const failures = [
+      { writeFileSync() { throw new Error('disk full'); }, renameSync },
+      { writeFileSync(path, bytes) { writeFileSync(path, path.endsWith('SKILL.md') ? 'corrupted' : bytes); }, renameSync },
+      { writeFileSync, renameSync(from, to) { if (from.includes('.auto-test-stage-')) throw new Error('swap failed'); renameSync(from, to); } },
+    ];
+    for (const io of failures) {
+      assert.throws(() => manageSkill({ action: 'update', target, io }));
+      assert.equal(readFileSync(join(target, 'SKILL.md'), 'utf8'), original);
+      assert.equal(manageSkill({ action: 'install', target }).changed, false);
+      assert.deepEqual(readdirSync(temp), ['installed']);
+    }
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('unsafe allowlist paths and missing payload files fail before changing the installation', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'auto-test unsafe '));
+  const target = join(temp, 'installed');
+  const root = join(temp, 'release');
+  try {
+    manageSkill({ action: 'install', target: root });
+    manageSkill({ action: 'install', target });
+    const pkgFile = join(root, 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgFile, 'utf8'));
+    for (const name of ['../outside', '/absolute', 'C:\\outside', 'core/../../outside', '.git', 'core:stream']) {
+      writeFileSync(pkgFile, JSON.stringify({ ...pkg, files: [...pkg.files, name] }));
+      assert.throws(() => manageSkill({ action: 'update', target, root }), /Unsafe payload path/);
+    }
+    writeFileSync(pkgFile, JSON.stringify({ ...pkg, files: pkg.files.filter((name) => name !== 'core') }));
+    assert.throws(() => manageSkill({ action: 'update', target, root }), /Missing required payload/);
+    writeFileSync(pkgFile, JSON.stringify(pkg));
+    rmSync(join(root, 'SKILL.md'));
+    assert.throws(() => manageSkill({ action: 'update', target, root }), /ENOENT/);
+    assert.equal(manageSkill({ action: 'install', target }).changed, false);
+    assert.throws(() => manageSkill({ action: 'install', target: temp, root }), /contain source/);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('interrupted swaps recover unchanged backups and concurrent operations are refused', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'auto-test recovery '));
+  const target = join(temp, 'installed');
+  const backup = `${target}.auto-test-backup`;
+  const lock = `${target}.auto-test-lock`;
+  try {
+    manageSkill({ action: 'install', target });
+    renameSync(target, backup);
+    assert.throws(() => manageSkill({ action: 'install', target, check: true }), /Recovery required/);
+    assert.equal(existsSync(target), false);
+    assert.equal(manageSkill({ action: 'install', target }).changed, false);
+    mkdirSync(lock);
+    for (const action of ['install', 'update', 'uninstall']) assert.throws(() => manageSkill({ action, target }));
+    rmSync(lock, { recursive: true });
+    manageSkill({ action: 'install', target: backup });
+    assert.throws(() => manageSkill({ action: 'uninstall', target }), /Interrupted operation/);
+    assert.ok(existsSync(join(target, 'SKILL.md')));
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('linked payloads and linked installation paths are refused', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'auto-test links '));
+  const root = join(temp, 'release');
+  try {
+    manageSkill({ action: 'install', target: root });
+    const link = join(temp, 'linked');
+    symlinkSync(root, link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => manageSkill({ action: 'install', target: join(link, 'nested') }), /linked target/);
+    assert.throws(() => manageSkill({ action: 'install', target: join(temp, 'target'), root: link }), /linked source/);
+    rmSync(join(root, 'templates'), { recursive: true });
+    symlinkSync(join(temp, 'linked'), join(root, 'templates'), process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => manageSkill({ action: 'install', target: join(temp, 'target'), root }), /symbolic link/);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });

@@ -91,7 +91,7 @@ FINALIZED            # 通过 Final Check Gate
 }
 ```
 
-- `dispatchTier`：`"A"`（已注册 Sub-Agent）或 `"B"`（`general-purpose` 承载，见 §五）。
+- `dispatchTier`：`"A"`（已注册 Sub-Agent）、`"B"`（独立通用 Agent 承载，见 §五），或 `"C"`（无独立调度工具时共享上下文串行角色，见 `rules/agent-compatibility.md`）。C 不提供上下文隔离，保留所有状态与磁盘契约。
 - `blocked`：`{ "stage": "...", "reason": "...", "evidence": ["..."], "resumeCondition": "..." }`。
 - `waitingForHuman`：`{ "stage": "case-designer", "caseIds": ["TC-X-001"], "guidance": "..." }`。
 - **写盘时机**：每个 Agent 回执落地后立刻整文件覆写（原子：先写 `.tmp` 再 rename）。
@@ -193,14 +193,15 @@ Orchestrator 传给 Agent 的**只能是路径 + 元数据 + 摘要**，禁止�
 | Tier | 条件 | 调度方式 |
 |------|------|---------|
 | **A** | 会话可用 Agent 列表中存在 `auto-test-*` 类型（已执行 `scripts/install-agents.mjs`） | `Agent(subagent_type: "auto-test-<name>", prompt: <输入契约 JSON>)` |
-| **B** | 未安装（默认，保证引擎零安装可移植） | `Agent(subagent_type: "general-purpose", prompt: "<角色引导> 读取 <skillDir>/agents/<name>.md 并严格遵守；输入契约：<JSON>")` |
+| **B** | 未注册专职角色，但具备独立子 Agent 工具 | `Agent(subagent_type: "general-purpose", prompt: "<角色引导> 读取 <skillDir>/agents/<name>.md 并严格遵守；输入契约：<JSON>")` |
+| **C** | 无独立子 Agent 工具 | 按 `rules/agent-compatibility.md` 串行切换角色，真实执行并逐阶段校验磁盘契约 |
 
-- **两者都是真实的 Agent 工具调度**：Sub-Agent 在**独立上下文窗口**中执行、独立持有工具结果、
+- **A/B 都是真实的 Agent 工具调度**：Sub-Agent 在**独立上下文窗口**中执行、独立持有工具结果、
   只回传结构化契约。差异仅在于**角色定义是「已注册」还是「运行时加载」**。
 - Claude Code 不从 Skill 目录加载 Agent 定义（只认 `.claude/agents/` 与 plugin `agents/`），
-  因此 Tier A 需要一次性安装；Tier B 是**默认且始终可用**的路径。
+  因此 Tier A 需要一次性安装；有独立通用调度工具时默认使用 Tier B，否则使用 Tier C。
 - Tier 判定结果写入 `pipeline.json.dispatchTier`，并在最终 Summary 中如实声明。
-- **无论哪个 Tier，Orchestrator 都不得自行执行 Sub-Agent 的专业工作**（见 `agents/orchestrator.md §Non-Responsibilities`）。
+- A/B 的 Orchestrator 不得自行执行专业工作；C 必须明确切换到指定角色后执行，不能宣称独立上下文或独立审查（见 `rules/agent-compatibility.md`）。
 
 ## 六、幂等
 

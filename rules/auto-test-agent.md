@@ -10,6 +10,9 @@
 
 ## 🏛 架构（v1.1.0 Multi-Agent）
 
+以下独立上下文和越权禁令描述 A/B 调度。无独立工具时，优先应用
+`rules/agent-compatibility.md` 的 Tier C 串行角色例外；状态、契约与验收保持不变。
+
 ```
 用户 ──/auto-test 或自然语言测试意图──▶ Orchestrator（主会话）
                                           │ 只调度、只管状态、只做验收
